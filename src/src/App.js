@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
 //  STORAGE
@@ -414,4 +414,460 @@ export default function App() {
       )}
 
       {/* HEADER */}
-      <div style={{ padding: "22px 18px 10px", dis
+      <div style={{ padding: "22px 18px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 10, color: "#333", letterSpacing: 3, textTransform: "uppercase" }}>Moliya Daftari</div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{today().slice(0, 7).replace("-", " / ")}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 10, color: "#333" }}>Umumiy balans</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: totalInc - totalExp >= 0 ? C.success : C.danger, fontFamily: "'JetBrains Mono',monospace" }}>
+            {fmt(totalInc - totalExp)} <span style={{ fontSize: 10, color: "#444" }}>so'm</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: "0 14px" }}>
+
+        {/* ═══════ HOME ═══════ */}
+        {page === "home" && (
+          <div>
+            {alerts.slice(0, 3).map((a, i) => (
+              <div key={i} style={{ background: `${a.type === "err" ? "#ff6b6b" : "#fb923c"}18`, border: `1px solid ${a.type === "err" ? "#ff6b6b" : "#fb923c"}44`, borderRadius: 12, padding: "9px 13px", marginBottom: 8, fontSize: 13, color: a.type === "err" ? "#ff6b6b" : "#fb923c" }}>
+                ⚠️ {a.msg}
+              </div>
+            ))}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              <Card style={{ padding: 14 }}>
+                <div style={{ fontSize: 10, color: "#444", letterSpacing: 2 }}>JAMI KIRIM</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: C.success, fontFamily: "'JetBrains Mono',monospace", marginTop: 2 }}>{fmt(totalInc)}</div>
+                <div style={{ fontSize: 11, color: "#444" }}>{st.incomes.length} marta tushum</div>
+              </Card>
+              <Card style={{ padding: 14 }}>
+                <div style={{ fontSize: 10, color: "#444", letterSpacing: 2 }}>JAMI XARAJAT</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: C.danger, fontFamily: "'JetBrains Mono',monospace", marginTop: 2 }}>{fmt(totalExp)}</div>
+                <div style={{ fontSize: 11, color: "#444" }}>{st.expenses.length} ta xarajat</div>
+              </Card>
+            </div>
+
+            <div style={{ fontSize: 10, color: "#333", letterSpacing: 3, textTransform: "uppercase", marginBottom: 10 }}>Virtual Hisoblar</div>
+            {BUCKETS.map(b => {
+              const bal = wallet[b.id] || 0;
+              const goal = st.goals[b.id] || 0;
+              return (
+                <Card key={b.id} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ fontSize: 24 }}>{b.icon}</div>
+                      <div>
+                        <div style={{ fontSize: 12, color: "#555" }}>{b.label}</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: bal < 0 ? C.danger : b.color, fontFamily: "'JetBrains Mono',monospace" }}>{fmt(bal)}</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      {bal < 0 && <Tag color={C.danger}>Manfiy!</Tag>}
+                      {goal > 0 && bal >= 0 && <div style={{ fontSize: 13, fontWeight: 700 }}>🎯 {Math.min(100, Math.round((bal / goal) * 100))}%</div>}
+                    </div>
+                  </div>
+                  {goal > 0 && <PBar used={bal} limit={goal} color={b.color} />}
+                </Card>
+              );
+            })}
+
+            {st.recurring.length > 0 && (
+              <Card style={{ marginBottom: 14, border: `1px solid #60a5fa33` }}>
+                <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>🔄 Takroriy xarajatlar</div>
+                {st.recurring.map(r => {
+                  const cat = allCats.find(c => c.id === r.cat);
+                  return (
+                    <div key={r.id} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
+                      <span style={{ fontSize: 13 }}>{cat?.icon} {cat?.name} <span style={{ color: "#444", fontSize: 11 }}>({r.dayOfMonth}-kuni)</span></span>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: C.danger }}>-{fmt(r.amount)}</span>
+                    </div>
+                  );
+                })}
+              </Card>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <Btn onClick={() => setShowIncome(true)} style={{ width: "100%" }}>+ Kirim</Btn>
+              <Btn onClick={() => fileRef.current?.click()} color="#1a1a2e" style={{ width: "100%", color: C.accent, border: `1px solid ${C.border}` }}>📸 Chek skan</Btn>
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleScan} />
+            <Btn onClick={() => setShowExpense(true)} color="#1a1a2e" style={{ width: "100%", color: C.accent, border: `1px solid ${C.border}` }}>+ Xarajat qo'shish</Btn>
+          </div>
+        )}
+
+        {/* ═══════ INCOMES ═══════ */}
+        {page === "incomes" && (
+          <div>
+            <Btn onClick={() => setShowIncome(true)} style={{ width: "100%", marginBottom: 14 }}>+ Yangi kirim</Btn>
+            {st.incomes.length === 0 ? (
+              <Card style={{ textAlign: "center", color: "#444", padding: 40 }}>
+                <div style={{ fontSize: 40 }}>💵</div>
+                <div style={{ marginTop: 8 }}>Hali kirim yo'q</div>
+              </Card>
+            ) : [...st.incomes].reverse().map(inc => {
+              const t = INCOME_TYPES.find(x => x.id === inc.type);
+              const s = inc.split || calcSplit(inc.amount);
+              return (
+                <Card key={inc.id} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <div style={{ fontSize: 22 }}>{t?.icon || "💰"}</div>
+                      <div>
+                        <div style={{ fontWeight: 700 }}>{t?.name || inc.type}</div>
+                        <div style={{ fontSize: 11, color: "#444" }}>{inc.date}{inc.note && ` · ${inc.note}`}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: 16, color: C.success, fontFamily: "'JetBrains Mono',monospace" }}>+{fmt(inc.amount)}</div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 4 }}>
+                    {[["Ehson", s.ehson, "#fbbf24"], ["Kelajak", s.kelajak, "#a78bfa"], ["O'yin", s.oyinkulgu, "#fb923c"], ["Ro'zg'or", s.rozgor, "#4ade80"], ["Biznes", s.biznes, "#60a5fa"]].map(([l, v, col]) => (
+                      <div key={l} style={{ background: `${col}18`, borderRadius: 8, padding: "4px 5px", textAlign: "center" }}>
+                        <div style={{ fontSize: 8, color: col }}>{l}</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: col, fontFamily: "'JetBrains Mono',monospace" }}>{fmt(v)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => upd(p => ({ incomes: p.incomes.filter(i => i.id !== inc.id) }))} style={{ background: "none", border: "none", color: "#333", cursor: "pointer", marginTop: 6, fontSize: 12 }}>🗑 O'chirish</button>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ═══════ EXPENSES ═══════ */}
+        {page === "expenses" && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+              <Btn onClick={() => setShowExpense(true)} style={{ width: "100%" }}>+ Xarajat</Btn>
+              <Btn onClick={() => fileRef.current?.click()} color="#1a1a2e" style={{ width: "100%", color: C.accent, border: `1px solid ${C.border}` }}>📸 Chek skan</Btn>
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleScan} />
+
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 8 }}>
+              {["all", ...BUCKETS.map(b => b.id)].map(b => (
+                <button key={b} onClick={() => setFilterBucket(b)}
+                  style={{ background: filterBucket === b ? C.accent : "#0f0f1a", color: filterBucket === b ? "#070710" : C.accent, border: `1px solid ${C.border}`, borderRadius: 20, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Syne',sans-serif" }}>
+                  {b === "all" ? "Hammasi" : BUCKETS.find(x => x.id === b)?.label || b}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 12 }}>
+              {["all", ...months].map(m => (
+                <button key={m} onClick={() => setFilterMonth(m)}
+                  style={{ background: filterMonth === m ? C.accent : "#0f0f1a", color: filterMonth === m ? "#070710" : C.accent, border: `1px solid ${C.border}`, borderRadius: 20, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Syne',sans-serif" }}>
+                  {m === "all" ? "Barcha oylar" : m}
+                </button>
+              ))}
+            </div>
+
+            {filteredExp.length === 0 ? (
+              <Card style={{ textAlign: "center", color: "#444", padding: 40 }}>
+                <div style={{ fontSize: 40 }}>📭</div>
+                <div style={{ marginTop: 8 }}>Xarajat yo'q</div>
+              </Card>
+            ) : [...filteredExp].reverse().map(e => {
+              const cat = allCats.find(c => c.id === e.cat);
+              const bkt = BUCKETS.find(b => b.id === e.bucket);
+              const mem = st.members.find(m => m.id === e.member);
+              return (
+                <Card key={e.id} style={{ marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <div style={{ fontSize: 22 }}>{cat?.icon || "📦"}</div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{cat?.name || e.cat}</div>
+                        <div style={{ fontSize: 11, color: "#444" }}>
+                          {e.date}{e.location && ` 📍${e.location}`}{e.note && ` · ${e.note}`}{mem && ` · ${mem.icon}${mem.name}`}
+                        </div>
+                        {bkt && <Tag color={bkt.color}>{bkt.label}</Tag>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ fontWeight: 800, color: C.danger, fontFamily: "'JetBrains Mono',monospace", fontSize: 14 }}>-{fmt(e.amount)}</div>
+                      <button onClick={() => upd(p => ({ expenses: p.expenses.filter(x => x.id !== e.id) }))} style={{ background: "none", border: "none", color: "#333", cursor: "pointer", fontSize: 15 }}>🗑</button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ═══════ ANALYSIS ═══════ */}
+        {page === "analysis" && (
+          <div>
+            <div style={{ fontSize: 10, color: "#333", letterSpacing: 3, textTransform: "uppercase", marginBottom: 10 }}>Bo'limlar tahlili</div>
+            {BUCKETS.filter(b => b.id !== "ehson").map(b => {
+              const expAmt = st.expenses.filter(e => e.bucket === b.id).reduce((a, e) => a + e.amount, 0);
+              const incAmt = st.incomes.reduce((a, i) => a + (i.split?.[b.id] || 0), 0);
+              return (
+                <Card key={b.id} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontWeight: 700 }}>{b.icon} {b.label}</span>
+                    <span style={{ fontSize: 13, color: wallet[b.id] < 0 ? C.danger : C.success, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>
+                      {fmt(wallet[b.id])} qoldi
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#444", marginTop: 4 }}>Jami tushgan: {fmt(incAmt)} · Sarflangan: {fmt(expAmt)}</div>
+                  <PBar used={expAmt} limit={incAmt} color={b.color} />
+                </Card>
+              );
+            })}
+
+            <div style={{ fontSize: 10, color: "#333", letterSpacing: 3, textTransform: "uppercase", margin: "16px 0 10px" }}>Kategoriyalar</div>
+            <Card style={{ marginBottom: 14 }}>
+              {(() => {
+                const sorted = allCats.map(cat => ({ cat, amt: st.expenses.filter(e => e.cat === cat.id).reduce((a, e) => a + e.amount, 0) })).filter(x => x.amt > 0).sort((a, b) => b.amt - a.amt);
+                const maxAmt = sorted[0]?.amt || 1;
+                if (sorted.length === 0) return <div style={{ color: "#444", textAlign: "center", padding: 20 }}>Xarajat yo'q</div>;
+                return sorted.map(({ cat, amt }) => {
+                  const bkt = BUCKETS.find(b => b.id === cat.bucket);
+                  return (
+                    <div key={cat.id} style={{ marginBottom: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                        <span>{cat.icon} {cat.name}</span>
+                        <span style={{ fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{fmt(amt)}</span>
+                      </div>
+                      <PBar used={amt} limit={maxAmt} color={bkt?.color || C.accent} />
+                    </div>
+                  );
+                });
+              })()}
+            </Card>
+
+            {months.length > 1 && (
+              <>
+                <div style={{ fontSize: 10, color: "#333", letterSpacing: 3, textTransform: "uppercase", marginBottom: 10 }}>Oylik solishtiruv</div>
+                <Card style={{ marginBottom: 14 }}>
+                  {months.slice(0, 6).map(m => {
+                    const mExp = st.expenses.filter(e => e.date?.startsWith(m)).reduce((a, e) => a + e.amount, 0);
+                    const mInc = st.incomes.filter(i => i.date?.startsWith(m)).reduce((a, i) => a + i.amount, 0);
+                    return (
+                      <div key={m} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 13 }}>{m}</span>
+                        <span style={{ fontSize: 12, color: "#555" }}>
+                          <span style={{ color: C.success }}>+{fmt(mInc)}</span> / <span style={{ color: C.danger }}>-{fmt(mExp)}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </Card>
+              </>
+            )}
+
+            <Card style={{ border: `1px solid #a78bfa44` }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>🤖 AI Maslahatchi</div>
+              {aiText && <div style={{ fontSize: 13, color: "#bbb", lineHeight: 1.7, marginBottom: 12, whiteSpace: "pre-wrap" }}>{aiText}</div>}
+              <Btn onClick={runAI} disabled={aiLoading} color="#a78bfa" style={{ width: "100%" }}>
+                {aiLoading ? "⏳ Tahlil qilinmoqda..." : "✨ AI tahlil qil"}
+              </Btn>
+            </Card>
+          </div>
+        )}
+
+        {/* ═══════ SETTINGS ═══════ */}
+        {page === "settings" && (
+          <div>
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 12 }}>🎯 Maqsadlar (so'mda)</div>
+              {BUCKETS.filter(b => b.id !== "ehson").map(b => (
+                <div key={b.id} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: "#555", marginBottom: 4 }}>{b.icon} {b.label}</div>
+                  <Inp type="number" placeholder="Maqsad summa" value={goalForm[b.id] !== undefined ? goalForm[b.id] : st.goals[b.id] || ""}
+                    onChange={e => setGoalForm(g => ({ ...g, [b.id]: e.target.value }))} />
+                </div>
+              ))}
+              <Btn onClick={() => {
+                const g = { ...st.goals };
+                Object.entries(goalForm).forEach(([k, v]) => { g[k] = parseInt(v) || 0; });
+                upd(() => ({ goals: g })); setGoalForm({}); notify("Maqsadlar saqlandi ✅");
+              }} style={{ width: "100%", marginTop: 4 }}>Saqlash</Btn>
+            </Card>
+
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 12 }}>🔄 Takroriy xarajatlar</div>
+              {st.recurring.map(r => {
+                const cat = allCats.find(c => c.id === r.cat);
+                return (
+                  <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ fontSize: 13 }}>{cat?.icon} {cat?.name} — har {r.dayOfMonth}-kuni</span>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ fontWeight: 700, color: C.danger, fontSize: 13, fontFamily: "'JetBrains Mono',monospace" }}>{fmt(r.amount)}</span>
+                      <button onClick={() => upd(p => ({ recurring: p.recurring.filter(x => x.id !== r.id) }))} style={{ background: "none", border: "none", color: "#333", cursor: "pointer" }}>🗑</button>
+                    </div>
+                  </div>
+                );
+              })}
+              <Btn onClick={() => setShowRecurring(true)} color="#1a1a2e" style={{ width: "100%", color: C.accent, border: `1px solid ${C.border}`, marginTop: 10 }}>+ Qo'shish</Btn>
+            </Card>
+
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 12 }}>👥 Oila a'zolari</div>
+              {st.members.map(m => (
+                <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                  <span>{m.icon} {m.name}</span>
+                  <button onClick={() => upd(p => ({ members: p.members.filter(x => x.id !== m.id) }))} style={{ background: "none", border: "none", color: "#333", cursor: "pointer" }}>🗑</button>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <Inp placeholder="Ism" value={memberForm.name} onChange={e => setMemberForm(f => ({ ...f, name: e.target.value }))} style={{ flex: 1 }} />
+                <Inp placeholder="😊" value={memberForm.icon} onChange={e => setMemberForm(f => ({ ...f, icon: e.target.value }))} style={{ width: 60 }} />
+                <Btn onClick={() => {
+                  if (!memberForm.name) return;
+                  upd(p => ({ members: [...p.members, { id: uid(), ...memberForm }] }));
+                  setMemberForm({ name: "", icon: "👤" }); notify("Qo'shildi ✅");
+                }}>+</Btn>
+              </div>
+            </Card>
+
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 12 }}>📤 Eksport</div>
+              <Btn onClick={exportCSV} color="#4ade80" style={{ width: "100%" }}>📊 CSV yuklab olish</Btn>
+            </Card>
+
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>📋 Formula</div>
+              <div style={{ fontSize: 12, color: "#555", lineHeight: 2 }}>
+                Har bir kirim → Ehson (1/40)<br />
+                Qolganidan → Kelajak 10% + O'yin-kulgu 10%<br />
+                Yana qolganidan → Ro'zg'or 45% + Biznes 55%
+              </div>
+            </Card>
+
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 12 }}>🔐 Xavfsizlik</div>
+              <Btn onClick={() => { upd(() => ({ pin: null })); setUnlocked(false); }} color="#1a1a2e" style={{ width: "100%", color: C.danger, border: `1px solid #ff6b6b44` }}>PIN o'zgartirish</Btn>
+            </Card>
+
+            <Card>
+              <div style={{ fontWeight: 700, marginBottom: 12 }}>🗑 Ma'lumotlar</div>
+              <Btn onClick={() => { if (window.confirm("HAMMA ma'lumot o'chadi!")) { setSt(DEFAULT_STATE); persist(DEFAULT_STATE); notify("O'chirildi"); } }} color="#1a1a2e" style={{ width: "100%", color: C.danger, border: `1px solid #ff6b6b44` }}>Hammasini o'chirish</Btn>
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* ═══════ MODALS ═══════ */}
+
+      {showIncome && (
+        <Modal onClose={() => setShowIncome(false)}>
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 16 }}>💵 Kirim qo'shish</div>
+          <Sel value={incForm.type} onChange={e => setIncForm(f => ({ ...f, type: e.target.value }))} style={{ marginBottom: 10 }}>
+            {INCOME_TYPES.map(t => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
+          </Sel>
+          <Inp type="number" placeholder="Summa (so'm)" value={incForm.amount} onChange={e => setIncForm(f => ({ ...f, amount: e.target.value }))} style={{ marginBottom: 10 }} />
+          <Inp placeholder="Izoh (ixtiyoriy)" value={incForm.note} onChange={e => setIncForm(f => ({ ...f, note: e.target.value }))} style={{ marginBottom: 10 }} />
+          <Inp type="date" value={incForm.date} onChange={e => setIncForm(f => ({ ...f, date: e.target.value }))} style={{ marginBottom: 14 }} />
+          {incForm.amount > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 4, marginBottom: 14 }}>
+              {(() => {
+                const s = calcSplit(parseInt(incForm.amount) || 0);
+                return [["Ehson", s.ehson, "#fbbf24"], ["Kelajak", s.kelajak, "#a78bfa"], ["O'yin", s.oyinkulgu, "#fb923c"], ["Ro'zg'or", s.rozgor, "#4ade80"], ["Biznes", s.biznes, "#60a5fa"]].map(([l, v, col]) => (
+                  <div key={l} style={{ background: `${col}18`, borderRadius: 8, padding: "5px", textAlign: "center" }}>
+                    <div style={{ fontSize: 8, color: col }}>{l}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: col, fontFamily: "'JetBrains Mono',monospace" }}>{fmt(v)}</div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn onClick={addIncome} style={{ flex: 1 }}>Qo'shish</Btn>
+            <Btn onClick={() => setShowIncome(false)} color="#1a1a2e" style={{ flex: 1, color: C.accent, border: `1px solid ${C.border}` }}>Bekor</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {showExpense && (
+        <Modal onClose={() => setShowExpense(false)}>
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 16 }}>📝 Xarajat qo'shish</div>
+          <Sel value={expForm.cat} onChange={e => setExpForm(f => ({ ...f, cat: e.target.value }))} style={{ marginBottom: 10 }}>
+            <option value="">Kategoriya tanlang...</option>
+            {allCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+          </Sel>
+          <Inp type="number" placeholder="Summa (so'm)" value={expForm.amount} onChange={e => setExpForm(f => ({ ...f, amount: e.target.value }))} style={{ marginBottom: 10 }} />
+          <Inp placeholder="Izoh" value={expForm.note} onChange={e => setExpForm(f => ({ ...f, note: e.target.value }))} style={{ marginBottom: 10 }} />
+          <Inp placeholder="📍 Joylashuv (Korzinka, Carrefour...)" value={expForm.location} onChange={e => setExpForm(f => ({ ...f, location: e.target.value }))} style={{ marginBottom: 10 }} />
+          {st.members.length > 0 && (
+            <Sel value={expForm.member} onChange={e => setExpForm(f => ({ ...f, member: e.target.value }))} style={{ marginBottom: 10 }}>
+              <option value="">Kim uchun? (ixtiyoriy)</option>
+              {st.members.map(m => <option key={m.id} value={m.id}>{m.icon} {m.name}</option>)}
+            </Sel>
+          )}
+          <Inp type="date" value={expForm.date} onChange={e => setExpForm(f => ({ ...f, date: e.target.value }))} style={{ marginBottom: 16 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn onClick={addExpense} style={{ flex: 1 }}>Qo'shish</Btn>
+            <Btn onClick={() => setShowExpense(false)} color="#1a1a2e" style={{ flex: 1, color: C.accent, border: `1px solid ${C.border}` }}>Bekor</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {showScan && (
+        <Modal onClose={() => { if (!scanLoading) { setScanResult(null); setShowScan(false); } }}>
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 16 }}>📸 Chek skaner</div>
+          {scanLoading && (
+            <div style={{ textAlign: "center", padding: 40, color: "#555" }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
+              <div>AI chekni o'qiyapti...</div>
+            </div>
+          )}
+          {scanResult && (
+            <>
+              <div style={{ fontSize: 13, color: "#555", marginBottom: 10 }}>Topilgan mahsulotlar:</div>
+              {scanResult.items.map((item, i) => {
+                const cat = allCats.find(c => c.id === item.category);
+                return (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ fontSize: 13 }}>{cat?.icon || "📦"} {item.name}</span>
+                    <span style={{ fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}>{fmt(item.amount)} so'm</span>
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", fontWeight: 800 }}>
+                <span>Jami</span>
+                <span style={{ color: C.danger, fontFamily: "'JetBrains Mono',monospace" }}>{fmt(scanResult.total)} so'm</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <Btn onClick={confirmScan} style={{ flex: 1 }}>✅ Tasdiqlash</Btn>
+                <Btn onClick={() => { setScanResult(null); setShowScan(false); }} color="#1a1a2e" style={{ flex: 1, color: C.accent, border: `1px solid ${C.border}` }}>Bekor</Btn>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
+
+      {showRecurring && (
+        <Modal onClose={() => setShowRecurring(false)}>
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 16 }}>🔄 Takroriy xarajat</div>
+          <Sel value={recurForm.cat} onChange={e => setRecurForm(f => ({ ...f, cat: e.target.value }))} style={{ marginBottom: 10 }}>
+            <option value="">Kategoriya...</option>
+            {allCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+          </Sel>
+          <Inp type="number" placeholder="Summa" value={recurForm.amount} onChange={e => setRecurForm(f => ({ ...f, amount: e.target.value }))} style={{ marginBottom: 10 }} />
+          <Inp placeholder="Izoh (internet, ijara...)" value={recurForm.note} onChange={e => setRecurForm(f => ({ ...f, note: e.target.value }))} style={{ marginBottom: 10 }} />
+          <Inp type="number" placeholder="Har oyning necha-kuni (1-31)" min={1} max={31} value={recurForm.dayOfMonth} onChange={e => setRecurForm(f => ({ ...f, dayOfMonth: e.target.value }))} style={{ marginBottom: 16 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn onClick={addRecurring} style={{ flex: 1 }}>Saqlash</Btn>
+            <Btn onClick={() => setShowRecurring(false)} color="#1a1a2e" style={{ flex: 1, color: C.accent, border: `1px solid ${C.border}` }}>Bekor</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* BOTTOM NAV */}
+      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "#0a0a14", borderTop: `1px solid ${C.border}`, display: "flex" }}>
+        {NAV.map(n => (
+          <button key={n.id} onClick={() => setPage(n.id)}
+            style={{ flex: 1, background: "none", border: "none", padding: "11px 0 7px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <div style={{ fontSize: 20 }}>{n.icon}</div>
+            <div style={{ fontSize: 9, color: page === n.id ? C.accent : "#333", fontWeight: page === n.id ? 800 : 400, fontFamily: "'Syne',sans-serif", letterSpacing: 0.5 }}>{n.label}</div>
+            {page === n.id && <div style={{ width: 16, height: 2, background: C.accent, borderRadius: 2 }} />}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
