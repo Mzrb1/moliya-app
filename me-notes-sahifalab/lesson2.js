@@ -65,7 +65,7 @@ function save() {
  catch(err){storageAvailable=false;warning('2-dars saqlanmadi. Qurilma xotirasini tekshiring va zaxira oling.');return false;}
 }
 const api={
- export:()=>JSON.parse(JSON.stringify(state)),
+ export:()=>{if(blocked)throw Error('2-darsning saqlangan ma’lumotlari o‘qilmadi; noto‘liq zaxira yaratish to‘xtatildi.');return JSON.parse(JSON.stringify(state));},
  validate:sanitize,
  restore: x=>{const v=sanitize(x);try{localStorage.setItem(KEY,JSON.stringify(v));state=v;blocked=false;storageAvailable=true;return true;}catch(e){warning('2-darsni tiklash uchun joy yetarli emas.');return false;}},
  reset:()=>{try{localStorage.removeItem(KEY);state=startData();blocked=false;return true;}catch(e){warning('2-darsni tozalab bo‘lmadi.');return false;}}
