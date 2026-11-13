@@ -55,7 +55,7 @@ function normalizeKeyword(text){
   .replace(/[^a-z0-9'\s]+/g,' ')
   .replace(/\s+/g,' ').trim();
 }
-const SUFFIXES=['ga','da','dan','ni','ning','lar','lari','larda','larga','lardan','larim','larimiz','im','imiz','si','sini','siga','sidan','dan','dagi','ga','gi','imga','imni','ga','da'];
+const SUFFIXES=['ga','ka','qa','da','dan','ni','ning','lar','lari','larda','larga','lardan','larim','larimiz','im','imiz','si','sini','siga','sidan','dan','dagi','ga','gi','imga','imni','ga','da'];
 function wordMatches(found,keyword){
  if(found===keyword)return true;
  return SUFFIXES.some(suffix=>found===keyword+suffix);
