@@ -6,6 +6,7 @@ const http=require('node:http');
 const {randomUUID,timingSafeEqual}=require('node:crypto');
 const {createClient}=require('@libsql/client');
 const F=require('../me-notes-sahifalab/finance-core.js');
+const {listLineUpdateId,listRangeForId}=require('./list-utils.cjs');
 function env(key){const x=process.env[key];if(!x)throw Error('Missing '+key);return x;}
 const token=env('BOT_TOKEN');
 const secret=env('TELEGRAM_WEBHOOK_SECRET');
@@ -100,15 +101,6 @@ function salaryText(plan){
  return text+'\nBu haqiqiy pul o‘tkazmasi yoki qo‘shimcha xarajat emas. Mini App hisoblari hozircha chat bilan sinxron emas.';
 }
 
-// One Telegram update -> one atomic batch; repeated webhook deliveries are ignored.
-// Old single-message update IDs are POSITIVE. List line IDs are NEGATIVE
-// and derived from the source update ID (no schema changes to existing transactions).
-function listLineUpdateId(updateId,ordinal){
- if(!Number.isSafeInteger(updateId)||updateId<0||!Number.isInteger(ordinal)||ordinal<0||ordinal>=20)throw Error('Ro‘yxat identifikatori noto‘g‘ri');
- const result=-(updateId*100+ordinal+1);
- if(!Number.isSafeInteger(result))throw Error('Ro‘yxat identifikatori juda katta');
- return result;
-}
 async function saveTelegramList(update,uid,w,chat_id,raw){
  const parsed=F.parseList(raw);
  if(!parsed)return false;
@@ -201,8 +193,7 @@ async function handleMessage(update){
   if(!q.rows.length){await send(chat_id,'Bekor qilinadigan yozuv yo‘q.');return;}
   const t=q.rows[0],tag=Number(t.update_id);
   if(tag<0){
-   const source=Math.floor((-tag-1)/100);
-   const lower=listLineUpdateId(source,19),upper=listLineUpdateId(source,0);
+   const {lower,upper}=listRangeForId(tag);
    const rows=await db.execute({sql:'SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS total FROM mn_transactions WHERE uid=? AND workspace_id=? AND update_id BETWEEN ? AND ?',
     args:[uid,w.id,lower,upper]});
    await db.execute({sql:'DELETE FROM mn_transactions WHERE uid=? AND workspace_id=? AND update_id BETWEEN ? AND ?',
