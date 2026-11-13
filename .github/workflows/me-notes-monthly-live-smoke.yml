@@ -1,0 +1,52 @@
+name: ME Notes Monthly Live Smoke
+on:
+  push:
+    branches:
+      - qa/me-notes-monthly-live-20261114
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  external-endpoints:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check public route status, authentication, static assets
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          const chat='https://me-notes-chat-test.onrender.com';
+          const ui='https://me-notes-sahifalab.onrender.com';
+          const origin='https://me-notes-sahifalab.onrender.com';
+          async function retry(url,opts={}){
+            let last;
+            for(let i=0;i<4;i++){
+              try{const res=await fetch(url,{...opts,signal:AbortSignal.timeout(25000)});
+                if(res.status>=500&&i<3){await new Promise(r=>setTimeout(r,1500));continue;}
+                return res;
+              }catch(e){last=e;await new Promise(r=>setTimeout(r,1500));}
+            }
+            throw last||new Error('Retry exhausted');
+          }
+          (async()=>{
+            const health=await retry(chat+'/health');assert.equal(health.status,200);
+            for(const route of ['/api/v1/workspaces','/api/v1/months?workspace=test','/api/v1/month-export?workspace=test&month=2026-10']){
+              const preflight=await retry(chat+route,{method:'OPTIONS',headers:{
+                Origin:origin,'Access-Control-Request-Method':'GET','Access-Control-Request-Headers':'X-Telegram-Init-Data'
+              }});
+              assert.equal(preflight.status,204,route+' CORS');
+              const auth=await retry(chat+route,{headers:{Origin:origin}});
+              assert.equal(auth.status,401,route+' must require signed Telegram initData');
+            }
+            for(const path of ['/index.html','/finance-unified.html','/finance-unified.js','/diary-month-archive.js']){
+              const res=await retry(ui+path);
+              assert.equal(res.status,200,path+' must exist');
+              const body=await res.text();assert.ok(body.length>100,path+' must not be empty');
+              if(path==='/index.html')assert.ok(body.includes('month-archive-card'));
+              if(path==='/finance-unified.html')assert.ok(body.includes('month-history'));
+            }
+            console.log('PASS: live health, CORS, auth, month-index routes and both Mini Apps');
+          })().catch(e=>{console.error(e.stack||e);process.exitCode=1;});
+          NODE
