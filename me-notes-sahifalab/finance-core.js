@@ -48,7 +48,7 @@ function categoryFor(w,kind,note){
  ["Ijara","ijara"],
  ["Tovar","tovar","mol"]];
  for(const [cat,...tokens] of rules)if(w.categories[kind].includes(cat)&&tokens.some(tk=>t.includes(tk)))return cat;
- if(kind==='income'&&t.includes('oylik')&&w.categories.income.includes('Maosh'))return 'Maosh';
+ if(kind==='income'&&(t.includes('oylik')||t.includes('maosh'))&&w.categories.income.includes('Maosh'))return 'Maosh';
  return w.categories[kind].at(-1);
 }
 function addTransaction(w,{kind,amount:val,date=today(),category,note=''}) {
