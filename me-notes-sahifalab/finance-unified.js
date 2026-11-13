@@ -86,10 +86,20 @@ async function fetchLedger(){
 }
 async function pull(){
  if(!initData)return;
- try{await fetchWorkspaces();state.online=true;await flush();await fetchLedger();state.online=true;render();noteStatus();}
- catch(e){
+ $('connection-help').classList.add('hidden');
+ try{
+  await fetchWorkspaces();state.online=true;await flush();await fetchLedger();
+  state.online=true;render();noteStatus();alertMessage('');
+  $('connection-help').classList.add('hidden');
+ }catch(e){
   state.online=false;
-  alertMessage(e.status===401?'Telegram sessiyasi eskirgan: botdan Mini App’ni qayta oching.':'Server bilan bog‘lanib bo‘lmadi. Oldingi saqlangan natija ko‘rsatilmoqda.');
+  const message=e.status===401?'Telegram sessiyasi tugagan. Botga /start yuborib, Mini App tugmasidan qayta kiring.':
+   e.status===403?'Mini App’ni ME Notes botining tugmasi orqali oching.':
+   e.status===404?'Mini App serveriga ulanish yo‘li topilmadi. Ilova yangilanganini tekshiring.':
+   'Server bilan aloqa uzildi. Internetni tekshiring va qayta urinib ko‘ring.';
+  alertMessage(message);
+  $('connection-explain').textContent=message;
+  $('connection-help').classList.toggle('hidden',!!current());
   noteStatus();render();
  }
 }
@@ -336,6 +346,7 @@ function setup(){
   }catch(err){alertMessage('Zaxira o‘qilmadi: '+err.message);}
  };
  $('confirm-import').onclick=importLegacy;
+ $('retry-connect').onclick=pull;
  $('sync-now').onclick=pull;
  $('export-data').onclick=exportData;
  window.addEventListener('online',()=>{flush();pull();});
