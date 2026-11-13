@@ -1,0 +1,16 @@
+{
+  "name": "me-notes-chat-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ME Notes Telegram chat backend",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.cjs",
+    "webhook": "node scripts/set-webhook.cjs"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.15"
+  }
+}

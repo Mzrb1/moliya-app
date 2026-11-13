@@ -68,3 +68,14 @@ test('limitni o‘chirish',()=>{
  const {w}=fixture();F.setBudget(w,'2026-11','Transport',100);F.setBudget(w,'2026-11','Transport',0);
  assert.equal(F.summary(w,'2026-11').budgets.find(x=>x.category==='Transport').limit,0);
 });
+
+test('Uzbekcha miqdor: 25 ming taksi',()=>assert.deepEqual(F.parseFast('25 ming taksi'),{kind:'expense',amount:25000,note:'taksi'}));
+test('Summani oxirida yozish: tushlik 35000',()=>assert.deepEqual(F.parseFast('tushlik 35000'),{kind:'expense',amount:35000,note:'tushlik'}));
+test('Summani oxirida yozish: taksi 25 ming',()=>assert.deepEqual(F.parseFast('taksi 25 ming'),{kind:'expense',amount:25000,note:'taksi'}));
+test('Daromad: +3 mln oylik',()=>assert.deepEqual(F.parseFast('+3 mln oylik'),{kind:'income',amount:3000000,note:'oylik'}));
+test('Katta pul: 1,5 mln maosh',()=>assert.deepEqual(F.parseFast('+1,5 mln maosh'),{kind:'income',amount:1500000,note:'maosh'}));
+test('Qo‘shimcha: 25k taksi',()=>assert.deepEqual(F.parseFast('25k taksi'),{kind:'expense',amount:25000,note:'taksi'}));
+test('Bog‘langan sonlar 25 000 taksi',()=>assert.deepEqual(F.parseFast('25 000 taksi'),{kind:'expense',amount:25000,note:'taksi'}));
+test('Bozor oilaviy hisob kategoriyasi',()=>{const {w}=fixture('family');assert.equal(F.categoryFor(w,'expense','bozor'),'Bozor');});
+test('Kichik biznes savdosi kategoriyasi',()=>{const {w}=fixture('business');assert.equal(F.categoryFor(w,'income','savdo tushumi'),'Savdo tushumi');});
+test('Mantiqsiz qiymatlar qabul qilinmaydi',()=>{for(const q of ['taksi','0 taksi','-25 ming','1,234,567 taksi','9999999999999999 taksi']){assert.equal(F.parseFast(q),null);}});

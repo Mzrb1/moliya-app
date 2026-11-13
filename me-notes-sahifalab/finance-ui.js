@@ -106,7 +106,7 @@ document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',(
 $('kind').addEventListener('change',categoryOptions);
 $('quick-form').addEventListener('submit',e=>{e.preventDefault();safeAction(()=>{
  const w=active();const parsed=F.parseFast($('quick-text').value);
- if(!parsed)throw Error('Misol: 25000 taksi yoki +3000000 oylik');
+ if(!parsed)throw Error('Misol: 25 ming taksi, tushlik 35000 yoki +3 mln oylik');
  const result=F.addTransaction(w,{...parsed,date:F.today()});
  if(commit()){$('quick-text').value='';render();notice('Yozuv saqlandi ✓ '+(result.alert||''));}
 });});

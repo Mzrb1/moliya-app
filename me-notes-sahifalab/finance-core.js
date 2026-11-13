@@ -28,28 +28,63 @@ function create(s,kind,name){
 }
 function current(s){return s.workspaces.find(w=>w.id===s.active)||null;}
 function setActive(s,workspaceId){if(!s.workspaces.some(w=>w.id===workspaceId))throw Error('Hisob topilmadi');s.active=workspaceId;}
+// Qoidaga asoslangan (AI xarajatisiz) bir-xabar parser.
+// Qiymat xabar boshida yoki oxirida bo‘lishi mumkin; xatoli raqam hech qachon saqlanmaydi.
 function parseFast(raw){
- const m=String(raw||'').match(/^\s*([+-]?)\s*(\d+(?:[ .,]\d{3})*)(?:\s+(.+))\s*$/);
- if(!m)return null;
- const v=amount(Number(m[2].replace(/[ .,]/g,'')));
- const note=cleanText(m[3]);if(!note)throw Error('Izoh kiriting');
- return {kind:m[1]==='+'?'income':'expense',amount:v,note};
+ const input=String(raw??'').trim().replace(/\s+/g,' ');
+ if(!input||input.length>260)return null;
+ const numeric=String.raw`(?:\d{1,3}(?:[ .]\d{3})+|\d+)(?:[.,]\d{1,2})?`;
+ const unit=String.raw`(?:ming|mln|million|millionta|k)`;
+ const currency=String.raw`(?:so‘m|soʻm|so'm|som)`;
+ const front=new RegExp('^([+-]?)\\s*('+numeric+')\\s*('+unit+')?\\s*(?:'+currency+')?\\s+(.+)$','i');
+ const back=new RegExp('^(.+?)\\s+([+-]?)\\s*('+numeric+')\\s*('+unit+')?\\s*(?:'+currency+')?$','i');
+ let match=front.exec(input), kind,number,scale,note;
+ if(match){
+   kind=match[1]==='+'?'income':'expense';number=match[2];scale=match[3];note=match[4];
+ } else {
+   match=back.exec(input);if(!match)return null;
+   note=match[1];kind=match[2]==='+'?'income':'expense';number=match[3];scale=match[4];
+ }
+ note=cleanText(note,160);
+ if(!note||/^[\d.,+\s-]+$/.test(note)||/^(ming|mln|million|millionta|k|so‘m|soʻm|so'm|som)$/i.test(note))return null;
+ const normalized=number.replace(/(?<=\d)[ .](?=\d{3}(?:\D|$))/g,'');
+ let n=Number(normalized.replace(',','.'));
+ if(!Number.isFinite(n)||n<=0)return null;
+ const factor=scale?/^mln|million/i.test(scale)?1000000:1000:1;
+ const total=n*factor;
+ // 25.5 so‘m emas, 25.5 ming = 25500 bo‘lishi mumkin.
+ if(!Number.isSafeInteger(total)||total<1||total>MAX)return null;
+ return {kind,amount:amount(total),note};
 }
 function categoryFor(w,kind,note){
- const t=note.toLowerCase();
- const rules=kind==='income'?[["maosh","oylik"],["savdo","sotuv"],["xizmat","usta"],["sovg'a","sovga"]]:[
- ["Transport","taksi","avtobus","yo'l","benzin","metro"],
- ["Oziq-ovqat","tushlik","non","ovqat","bozor","market"],
- ["Bozor","bozor","market"],
- ["Kommunal","svet","gaz","internet","suv"],
- ["Kiyim","kiyim","krossovka"],
- ["Sog'liq","dori","shifoxona"],
- ["Reklama","reklama"],
- ["Ijara","ijara"],
- ["Tovar","tovar","mol"]];
- for(const [cat,...tokens] of rules)if(w.categories[kind].includes(cat)&&tokens.some(tk=>t.includes(tk)))return cat;
- if(kind==='income'&&(t.includes('oylik')||t.includes('maosh'))&&w.categories.income.includes('Maosh'))return 'Maosh';
- return w.categories[kind].at(-1);
+ const t=String(note||'').toLowerCase();
+ if(kind==='income'){
+  const rules=[
+    ['Maosh',['oylik','maosh','avans']],
+    ['Savdo tushumi',['savdo','sotuv','tushum']],
+    ['Xizmat daromadi',['xizmat','usta','freelance']],
+    ["Sovg'a",['sovga','sovg‘a',"sovg'a"]]
+  ];
+  for(const [cat,keys] of rules)if(w.categories.income.includes(cat)&&keys.some(k=>t.includes(k)))return cat;
+  return w.categories.income.at(-1);
+ }
+ const rules=[
+  [['Transport'],['taksi','avtobus',"yo'l",'benzin','metro','yandex']],
+  [['Bozor','Oziq-ovqat'],['bozor','market','supermarket','magazin','tushlik','non','ovqat','kafe']],
+  [['Kommunal'],['svet','gaz','internet','suv','elektr']],
+  [['Kiyim'],['kiyim','krossovka','futbolka']],
+  [["Sog'liq"],['dori','shifoxona','doktor']],
+  [['Reklama'],['reklama']],
+  [['Ijara'],['ijara']],
+  [['Tovar'],['tovar','xomashyo','material']]
+ ];
+ for(const [cats,keys] of rules){
+  if(keys.some(k=>t.includes(k))){
+   const category=cats.find(cat=>w.categories.expense.includes(cat));
+   if(category)return category;
+  }
+ }
+ return w.categories.expense.at(-1);
 }
 function addTransaction(w,{kind,amount:val,date=today(),category,note=''}) {
  if(!['income','expense'].includes(kind))throw Error('Operatsiya turi noto‘g‘ri');
