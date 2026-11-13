@@ -146,3 +146,83 @@ test('O‘chirish qayta yuborilsa yozuv qayta paydo bo‘lmaydi',async()=>{
  assert.equal((await api.ledger('111','personal-111','2026-11')).transactions.length,0);
  db.close();
 });
+
+
+test('Mini App custom categories are stored separately per account',async()=>{
+ const {db,api}=await freshDb();
+ const op={op_id:'web_custom_category_00001',workspace_id:'personal-111',action:'category_add',kind:'expense',name:'Uy hayvonlari'};
+ await api.execute('111',op);
+ assert.equal((await api.execute('111',op)).already,true);
+ const a=await api.ledger('111','personal-111','2026-11');
+ const b=await api.ledger('222','personal-222','2026-11');
+ assert.ok(a.category_options.expense.includes('Uy hayvonlari'));
+ assert.ok(!b.category_options.expense.includes('Uy hayvonlari'));
+ db.close();
+});
+test('Custom keyword controls automatic chat category selection',async()=>{
+ const {db,api}=await freshDb();
+ const wid='personal-111';
+ await api.execute('111',{op_id:'web_custom_keyword_00001',workspace_id:wid,action:'category_add',kind:'expense',name:'Uy hayvonlari'});
+ await api.execute('111',{op_id:'web_custom_keyword_00002',workspace_id:wid,action:'keyword_add',kind:'expense',category:'Uy hayvonlari',word:'mushuk'});
+ const prefs=await api.preferences({id:wid,kind:'personal'});
+ const F=require('../../me-notes-sahifalab/finance-core.js');
+ assert.equal(F.categoryFor({categories:prefs.categories,keywords:prefs.keywords},'expense','mushukka'), 'Uy hayvonlari');
+ await api.execute('111',{op_id:'web_custom_keyword_00003',workspace_id:wid,action:'keyword_delete',kind:'expense',category:'Uy hayvonlari',word:'mushuk'});
+ const after=await api.preferences({id:wid,kind:'personal'});
+ assert.equal(after.keywords.expense['Uy hayvonlari']?.length||0,0);
+ db.close();
+});
+test('Duplicate keyword for a different category is rejected',async()=>{
+ const {db,api}=await freshDb();
+ await api.execute('111',{op_id:'web_kw_unique_00001',workspace_id:'personal-111',action:'keyword_add',kind:'expense',category:'Transport',word:'mytrip'});
+ await assert.rejects(()=>api.execute('111',{op_id:'web_kw_unique_00002',workspace_id:'personal-111',action:'keyword_add',kind:'expense',category:'Oziq-ovqat',word:'mytrip'}));
+ db.close();
+});
+test('Edit transaction updates amount, category and date without creating duplicate row',async()=>{
+ const {db,api}=await freshDb();
+ await api.execute('111',{op_id:'web_edit_transaction_00001',workspace_id:'personal-111',action:'add',entry:{kind:'expense',amount:98000,date:'2026-11-13',note:'Tushlik'}});
+ const prior=await api.ledger('111','personal-111','2026-11');
+ const tx=prior.transactions[0];
+ const op={op_id:'web_edit_transaction_00002',workspace_id:'personal-111',action:'edit',transaction_id:tx.id,
+  entry:{kind:'expense',amount:18000,category:'Transport',date:'2026-11-14',note:'yo‘lga'}};
+ assert.equal((await api.execute('111',op)).updated,1);
+ assert.equal((await api.execute('111',op)).already,true);
+ const after=await api.ledger('111','personal-111','2026-11');
+ assert.equal(after.transactions.length,1);
+ assert.equal(after.transactions[0].id,tx.id);
+ assert.equal(after.transactions[0].amount,18000);
+ assert.equal(after.transactions[0].category,'Transport');
+ assert.equal(after.transactions[0].date,'2026-11-14');
+ db.close();
+});
+test('Editing another person transaction cannot alter it',async()=>{
+ const {db,api}=await freshDb();
+ await api.execute('111',{op_id:'web_edit_ownership_001',workspace_id:'personal-111',action:'add',entry:{kind:'expense',amount:98000,date:'2026-11-13',note:'Tushlik'}});
+ const tx=(await api.ledger('111','personal-111','2026-11')).transactions[0];
+ await assert.rejects(()=>api.execute('222',{op_id:'web_edit_ownership_002',workspace_id:'personal-222',action:'edit',transaction_id:tx.id,entry:{amount:1}}));
+ assert.equal((await api.ledger('111','personal-111','2026-11')).totals.expense,98000);
+ db.close();
+});
+test('Built-in categories cannot be deleted',async()=>{
+ const {db,api}=await freshDb();
+ await assert.rejects(()=>api.execute('111',{op_id:'web_delete_default_001',workspace_id:'personal-111',action:'category_delete',kind:'expense',name:'Transport'}));
+ db.close();
+});
+test('Used extra category cannot be deleted or orphan existing rows',async()=>{
+ const {db,api}=await freshDb();
+ const wid='personal-111';
+ await api.execute('111',{op_id:'web_add_extra_category_001',workspace_id:wid,action:'category_add',kind:'expense',name:'Uy hayvonlari'});
+ await api.execute('111',{op_id:'web_add_extra_tx_00001',workspace_id:wid,action:'add',entry:{kind:'expense',amount:13000,date:'2026-11-13',category:'Uy hayvonlari',note:'mushuk yemagi'}});
+ await assert.rejects(()=>api.execute('111',{op_id:'web_delete_extra_cat_001',workspace_id:wid,action:'category_delete',kind:'expense',name:'Uy hayvonlari'}));
+ assert.equal((await api.ledger('111',wid,'2026-11')).totals.expense,13000);
+ db.close();
+});
+test('Custom categories still honor monthly fixed limits',async()=>{
+ const {db,api}=await freshDb();
+ const wid='personal-111';
+ await api.execute('111',{op_id:'web_add_custom_cat_001',workspace_id:wid,action:'category_add',kind:'expense',name:'Uy hayvonlari'});
+ await api.execute('111',{op_id:'web_add_custom_budget_001',workspace_id:wid,action:'budget',month:'2026-11',category:'Uy hayvonlari',limit:25000});
+ const ledger=await api.ledger('111',wid,'2026-11');
+ assert.equal(ledger.categories.find(x=>x.category==='Uy hayvonlari').limit,25000);
+ db.close();
+});
