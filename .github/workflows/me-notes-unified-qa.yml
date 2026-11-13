@@ -24,10 +24,11 @@ jobs:
           node --check me-notes-bot/miniapp-auth.cjs
           node --check me-notes-bot/miniapp-api.cjs
           node --check me-notes-bot/server.cjs
+          node --check me-notes-bot/request-route.cjs
           node --check me-notes-sahifalab/finance-unified.js
           node --check me-notes-sahifalab/finance-sw.js
       - name: API security and shared ledger tests
-        run: node --test me-notes-bot/tests/miniapp-api.test.cjs
+        run: node --test me-notes-bot/tests/miniapp-api.test.cjs me-notes-bot/tests/request-route.test.cjs
       - name: Existing finance and Telegram list regression
         run: node --test tests/finance-core.test.cjs tests/me-notes-list.test.cjs
       - name: Unified UI link and fallback smoke
