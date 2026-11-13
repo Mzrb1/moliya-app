@@ -8,7 +8,7 @@
 const VERSION=1,MAX=1000000000000,MAX_WORKSPACES=12;
 const KINDS={personal:"Shaxsiy moliyam",family:"Oilaviy byudjet",business:"Biznes moliyam"};
 const BASE={
- personal:{expense:["Oziq-ovqat","Transport","Uy-ro'zg'or","Kommunal","Sog'liq","Kiyim","Ta'lim","Dam olish","Boshqa"],income:["Maosh","Qo'shimcha ish","Sovg'a","Boshqa"]},
+ personal:{expense:["Oziq-ovqat","Transport","Bolalar","Uy-ro'zg'or","Kommunal","Sog'liq","Kiyim","Ta'lim","Dam olish","Qarz va majburiyatlar","Boshqa"],income:["Maosh","Qo'shimcha ish","Sovg'a","Boshqa"]},
  family:{expense:["Bozor","Kommunal","Bolalar","Uy-ro'zg'or","Transport","Sog'liq","Ta'lim","Boshqa"],income:["Maosh","Oilaviy kirim","Boshqa"]},
  business:{expense:["Tovar","Ijara","Ish haqi","Transport","Kommunal","Reklama","Boshqa"],income:["Savdo tushumi","Xizmat daromadi","Boshqa"]}
 };
@@ -25,6 +25,7 @@ function fresh(){return {version:VERSION,active:null,workspaces:[]};}
 const KEYWORD_RULES={
  expense:[
   {categories:['Transport'],words:["taksi","taxi","yo'l","yo'lkira","yolkira","yul","avtobus","marshrutka","metro","benzin","dizel","zapravka","azs","avtoyuvish","parkovka","avtoservis","shina","yandex","indrive","transport","yo'lovchi","yonilg'i","yoqilg'i","chipta"]},
+  {categories:['Qarz va majburiyatlar'],words:["qarz","kredit","kredit to'lovi","bank krediti","nasiya","nasiyaga","bo'lib to'lash","foiz to'lovi","qarzni yopish"]},
   {categories:['Bolalar'],words:["farzand","bolalar","bolaga","bog'cha","pampers","taglik","o'yinchoq","chaqaloq","maktab formasi","bolalar kiyimi"]},
   {categories:['Ta\'lim'],words:["o'qish","o'quv","maktab","kurs","kontrakt","kitob","daftar","repetitor","dars","ustoz","universitet","ta'lim","o'qituvchi"]},
   {categories:['Bozor','Oziq-ovqat'],words:["bozor","oziq ovqat","supermarket","market","magazin","do'kon","dukon","non","tuxum","go'sht","guruch","sabzi","kartoshka","meva","sabzavot","sut","shakar","tushlik","nonushta","kechki ovqat","restoran","kafe","osh","palov","kabob","somsa","burger","ichimlik","ovqat"]},
