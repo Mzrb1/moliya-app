@@ -1,0 +1,30 @@
+name: ME Notes One Message QA
+on:
+  push:
+    branches:
+      - feature/me-notes-one-message-20261113
+  pull_request:
+    branches:
+      - me-notes-sahifalab-diary
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax checks
+        run: |
+          node --check me-notes-sahifalab/finance-core.js
+          node --check me-notes-sahifalab/finance-ui.js
+          node --check me-notes-bot/server.cjs
+          node --check me-notes-bot/scripts/set-webhook.cjs
+      - name: Finance parser and accounting
+        run: node --test tests/finance-core.test.cjs
+      - name: HTML one-message integration
+        run: |
+          node -e "const fs=require('fs');const h=fs.readFileSync('me-notes-sahifalab/finance.html','utf8');if(!h.includes('25 ming taksi')||!h.includes('finance-ui.js'))throw Error('Quick entry missing')"
