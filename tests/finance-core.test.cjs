@@ -277,3 +277,24 @@ test('Eski zaxira qayta ochilganda avtomatik reja ishlaydi',()=>{
  const restored=F.validate(JSON.parse(JSON.stringify(s)));
  assert.equal(F.salaryAllocation(restored.workspaces[0],'2026-11').salary,5000000);
 });
+
+
+test('Yaxlitlash: har qanday kichik oylikda kategoriya limitlari manfiy emas',()=>{
+ for(let salary=1;salary<200;salary++){
+  const {w}=fixture();
+  F.addTransaction(w,{kind:'income',amount:salary,date:'2026-11-13',category:'Maosh'});
+  const p=F.salaryAllocation(w,'2026-11');
+  const sum=Object.values(p.targets).filter(x=>x.bucket==='rozgor').reduce((a,x)=>{
+   assert.ok(Number.isSafeInteger(x.limit)&&x.limit>=0);
+   return a+x.limit;
+  },0);
+  assert.equal(sum,p.rozgor);
+ }
+});
+test('Ro‘zg‘or limiti tugab qolganida yangi xarajatda ogohlantirish',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ F.setBudget(w,'2026-11','Oziq-ovqat',2000000);
+ const r=F.addTransaction(w,{kind:'expense',amount:25000,date:'2026-11-13',category:'Transport'});
+ assert.match(r.alert,/mablag‘i qolmagan/);
+});
