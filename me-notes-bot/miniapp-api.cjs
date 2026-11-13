@@ -123,10 +123,11 @@ function makeFinanceApi({db,botToken,ensure}){
   const w=await owned(uid,wid);
   if(!validMonth(month))throw Error('Hisobot oyi noto‘g‘ri');
   const [rows,bs]=await Promise.all([
-   db.execute({sql:'SELECT id,kind,category,amount,note,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<? ORDER BY day DESC,rowid DESC LIMIT 1500',
+   db.execute({sql:'SELECT id,kind,category,amount,note,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<? ORDER BY day DESC,rowid DESC LIMIT 10001',
     args:[uid,wid,month+'-01',nextMonth(month)+'-01']}),
    db.execute({sql:'SELECT category,limit_amount FROM mn_budgets WHERE workspace_id=? AND month=?',args:[wid,month]})
   ]);
+  if(rows.rows.length>10000)throw Error('Oylik hisobot uchun 10 000 tadan ortiq yozuv bor. Hisob noto‘g‘ri chiqmasligi uchun bu oy bo‘laklab tekshirilishi kerak.');
   const transactions=rows.rows.map(r=>({id:String(r.id),kind:r.kind,category:String(r.category),amount:Number(r.amount),note:String(r.note||''),date:String(r.day)}));
   const budgets=Object.fromEntries(bs.rows.map(r=>[String(r.category),Number(r.limit_amount)]));
   const prefs=await preferences(w);
@@ -134,7 +135,7 @@ function makeFinanceApi({db,botToken,ensure}){
   const summary=F.summary(shadow,month);
   const closedAt=await closed(uid,wid,month);
   const plan=F.salaryAllocation(shadow,month);
-  return {workspace:{id:w.id,kind:w.kind,name:w.name},month,closed_at:closedAt,transactions,more:transactions.length===1500,
+  return {workspace:{id:w.id,kind:w.kind,name:w.name},month,closed_at:closedAt,transactions,more:false,
     totals:{income:summary.income,expense:summary.expense,net:summary.net},categories:summary.budgets,category_options:prefs.categories,keywords:prefs.keywords,budgets,plan};
  }
  async function execute(uid,body){
