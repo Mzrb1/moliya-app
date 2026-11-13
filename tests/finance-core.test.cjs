@@ -164,3 +164,116 @@ test('Mavjud yozuvlar toifasi lug‘at o‘zgarganda avtomatik o‘zgarmaydi',()
  assert.equal(F.categoryFor(w,'expense','yo‘lga'),'Transport');
  assert.equal(F.summary(w,'2026-11').transactions[0].category,'Boshqa');
 });
+
+
+test('5 mln oylik — aniq 2.5/10/10/45/55 taqsimot',()=>{
+ const p=F.splitSalary(5000000);
+ assert.deepEqual(p,{salary:5000000,ehson:125000,kelajak:487500,oyin:487500,rozgor:1755000,biznes:2145000});
+ assert.equal(p.ehson+p.kelajak+p.oyin+p.rozgor+p.biznes,p.salary);
+});
+test('Taqsimotda kichik summa va yaxlitlash yo‘qolmasin',()=>{
+ for(const a of [1,2,3,99,1000,10001,1234567,999999999]){
+  const p=F.splitSalary(a);
+  assert.equal(p.ehson+p.kelajak+p.oyin+p.rozgor+p.biznes,a);
+ }
+});
+test('Maosh bir daromad yozuvi, taqsimot xarajatlarni ko‘paytirmaydi',()=>{
+ const {w}=fixture('personal');
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh',note:'oylik'});
+ const p=F.salaryAllocation(w,'2026-11');
+ assert.equal(p.rozgor,1755000);
+ assert.equal(F.summary(w,'2026-11').income,5000000);
+ assert.equal(F.summary(w,'2026-11').expense,0);
+ assert.equal(w.transactions.length,1);
+});
+test('Ro‘zg‘or taxminiy limitlari jami to‘liq, Dam olish alohida',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ const p=F.salaryAllocation(w,'2026-11');
+ const sum=Object.entries(p.targets).filter(([cat,x])=>x.bucket==='rozgor').reduce((a,[cat,x])=>a+x.limit,0);
+ assert.equal(sum,p.rozgor);
+ assert.equal(p.targets['Dam olish'].limit,p.oyin);
+ assert.equal(p.targets['Transport'].mode,'auto');
+});
+test('Bir oydagi bir nechta maosh qo‘shilib hisoblanadi',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:2000000,date:'2026-11-01',category:'Maosh'});
+ F.addTransaction(w,{kind:'income',amount:3000000,date:'2026-11-13',category:'Maosh'});
+ const p=F.salaryAllocation(w,'2026-11');
+ assert.equal(p.salary,5000000);
+ assert.equal(p.sourceCount,2);
+ assert.equal(p.ehson,125000);
+});
+test('Sovg‘a va boshqa daromad avtomatik taqsimlanmaydi',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:"Sovg'a"});
+ assert.equal(F.salaryAllocation(w,'2026-11'),null);
+});
+test('Faqat shaxsiy hisobda ishga tushadi; oilaviy va biznes mustaqil',()=>{
+ for(const type of ['family','business']){
+  const {w}=fixture(type);
+  assert.equal(F.salaryAllocation(w,'2026-11'),null);
+ }
+});
+test('Qat’iy limit saqlanib, boshqa yumshoq limitlar qayta bo‘linadi',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ F.setBudget(w,'2026-11','Oziq-ovqat',1000000);
+ const p=F.salaryAllocation(w,'2026-11');
+ assert.equal(p.targets['Oziq-ovqat'].limit,1000000);
+ assert.equal(p.targets['Oziq-ovqat'].mode,'fixed');
+ const sum=Object.values(p.targets).filter(x=>x.bucket==='rozgor').reduce((a,x)=>a+x.limit,0);
+ assert.equal(sum,p.rozgor);
+ assert.equal(F.effectiveCategoryLimit(w,'2026-11','Transport').mode,'auto');
+});
+test('Qat’iy limit oshsa defitsit ko‘rinadi; qiymat qisqartirilmaydi',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ F.setBudget(w,'2026-11','Oziq-ovqat',2000000);
+ const p=F.salaryAllocation(w,'2026-11');
+ assert.equal(p.hardShortfall,245000);
+ assert.equal(p.targets['Oziq-ovqat'].limit,2000000);
+ assert.equal(p.targets['Transport'].limit,0);
+});
+test('Qat’iy limitdan avtomatik limitga qaytarish',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ F.setBudget(w,'2026-11','Transport',500000);
+ assert.equal(F.effectiveCategoryLimit(w,'2026-11','Transport').mode,'fixed');
+ F.setBudget(w,'2026-11','Transport',0);
+ assert.equal(F.effectiveCategoryLimit(w,'2026-11','Transport').mode,'auto');
+});
+test('Dam olish me’yori to‘g‘ridan-to‘g‘ri o‘yin-kulgi puliga teng',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ F.setBudget(w,'2026-11','Dam olish',600000);
+ const p=F.salaryAllocation(w,'2026-11');
+ assert.equal(p.leisureShortfall,112500);
+ assert.equal(p.targets['Dam olish'].mode,'fixed');
+});
+test('Yangi oyda maosh kiritilmasa o‘tgan oy limitlari ko‘chmaydi',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ assert.equal(F.salaryAllocation(w,'2026-12'),null);
+ assert.equal(F.effectiveCategoryLimit(w,'2026-12','Transport').limit,0);
+});
+test('Maosh tahrirlansa yoki o‘chirilsa reja ham yangilanadi',()=>{
+ const {w}=fixture(),{tx}=F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ F.editTransaction(w,tx.id,{amount:4000000});
+ assert.equal(F.salaryAllocation(w,'2026-11').salary,4000000);
+ F.removeTransaction(w,tx.id);
+ assert.equal(F.salaryAllocation(w,'2026-11'),null);
+});
+test('Taxminiy limit ishlatilganda 80% ogohlantirish chiqaradi',()=>{
+ const {w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ const provisional=F.effectiveCategoryLimit(w,'2026-11','Transport').limit;
+ const tx=F.addTransaction(w,{kind:'expense',amount:Math.ceil(provisional*.8),date:'2026-11-13',category:'Transport'});
+ assert.match(tx.alert,/80%/);
+});
+test('Eski zaxira qayta ochilganda avtomatik reja ishlaydi',()=>{
+ const {s,w}=fixture();
+ F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-13',category:'Maosh'});
+ const restored=F.validate(JSON.parse(JSON.stringify(s)));
+ assert.equal(F.salaryAllocation(restored.workspaces[0],'2026-11').salary,5000000);
+});
