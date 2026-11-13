@@ -189,8 +189,22 @@ async function main(){
    if(update.callback_query)await handleCallback(update);
    res.writeHead(200);res.end('ok');
   }catch(e){console.error('Webhook handling failed:',String(e.message).slice(0,120));res.writeHead(503);res.end('retry');}
- }).listen(Number(process.env.PORT||10000),'0.0.0.0');
- console.log('ME Notes Telegram chat listener started');
+ }).listen(Number(process.env.PORT||10000),'0.0.0.0',async()=>{
+  console.log('ME Notes Telegram chat listener started');
+  // Faqat Render environmentda maxsus yoqilgandagina webhook almashtiriladi.
+  if(process.env.AUTO_SET_WEBHOOK==='true'){
+   const base=String(process.env.PUBLIC_BASE_URL||'').trim();
+   if(!/^https:\/\/[a-zA-Z0-9.-]+(?::443)?\/?$/.test(base)){
+    console.error('AUTO_SET_WEBHOOK skipped: PUBLIC_BASE_URL is not a clean HTTPS domain');
+    return;
+   }
+   try{
+    await api('setWebhook',{url:base.replace(/\/$/,'')+'/telegram/webhook',
+      secret_token:secret,allowed_updates:['message','callback_query'],drop_pending_updates:false});
+    console.log('Telegram webhook installed by explicit AUTO_SET_WEBHOOK flag');
+   }catch(err){console.error('Telegram webhook setup failed:',String(err.message).slice(0,120));}
+  }
+ });
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exit(1);});
 module.exports={nextMonth,checkSecret};
