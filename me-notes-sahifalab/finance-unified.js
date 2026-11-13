@@ -427,6 +427,66 @@ function setup(){
    alertMessage(parts.length+' ta yozuv telefonda saqlandi, serverga yuboriladi.',true);
   }catch(err){alertMessage(err.message);}
  };
+ $('manual-date').value=F.today();
+ $('manual-toggle').onclick=()=>{
+  const opened=$('manual-form').classList.toggle('hidden')===false;
+  $('manual-toggle').textContent=opened?'Yopish':'Ochish';
+  $('manual-toggle').setAttribute('aria-expanded',opened?'true':'false');
+ };
+ $('manual-kind').onchange=()=>fillCategory('manual-category',$('manual-kind').value);
+ $('manual-form').onsubmit=e=>{
+  e.preventDefault();
+  try{
+   const kind=$('manual-kind').value,amount=F.amount(Number($('manual-amount').value)),
+    date=$('manual-date').value,category=$('manual-category').value,note=$('manual-note').value.trim();
+   if(!F.validDay(date)||!note)throw Error('Sana va izohni tekshiring');
+   enqueue({action:'add',entry:{kind,amount,date,category,note}});
+   $('manual-form').reset();$('manual-date').value=F.today();
+   fillCategory('manual-category','expense');
+   alertMessage('Yozuv navbatga qo‘shildi. Telegram bilan sinxronlanadi.',true);
+  }catch(err){alertMessage(err.message);}
+ };
+ $('edit-kind').onchange=()=>fillCategory('edit-category',$('edit-kind').value);
+ $('edit-cancel').onclick=closeEdit;
+ $('edit-form').onsubmit=e=>{
+  e.preventDefault();
+  try{
+   if(!editingId)throw Error('Tahrir uchun yozuv tanlanmagan');
+   const entry={kind:$('edit-kind').value,date:$('edit-date').value,
+    category:$('edit-category').value,amount:F.amount(Number($('edit-amount').value)),
+    note:$('edit-note').value.trim()};
+   if(!F.validDay(entry.date)||!entry.note)throw Error('Sana yoki izoh noto‘g‘ri');
+   enqueue({action:'edit',transaction_id:editingId,entry});
+   closeEdit();alertMessage('O‘zgarish saqlash navbatiga qo‘shildi.',true);
+  }catch(err){alertMessage(err.message);}
+ };
+ $('settings-kind').onchange=()=>{const d=compute();if(d)renderSettings(d);};
+ $('settings-category').onchange=()=>{const d=compute();if(d)renderSettings(d);};
+ $('category-form').onsubmit=e=>{
+  e.preventDefault();
+  try{
+   const d=compute(),kind=$('settings-kind').value,name=$('category-name').value.trim();
+   if(!d)throw Error('Hisob yuklanmagan');
+   const temp={categories:structuredClone(d.prefs.categories)};
+   F.addCategory(temp,kind,name);
+   enqueue({action:'category_add',kind,name});
+   $('category-name').value='';
+   alertMessage('Yangi kategoriya qo‘shish navbatida.',true);
+  }catch(err){alertMessage(err.message);}
+ };
+ $('keyword-form').onsubmit=e=>{
+  e.preventDefault();
+  try{
+   const d=compute(),kind=$('settings-kind').value,category=$('settings-category').value,
+    word=$('keyword-word').value.trim();
+   if(!d)throw Error('Hisob yuklanmagan');
+   const temp={categories:structuredClone(d.prefs.categories),keywords:structuredClone(d.prefs.keywords)};
+   const normalized=F.addKeyword(temp,kind,category,word);
+   enqueue({action:'keyword_add',kind,category,word:normalized});
+   $('keyword-word').value='';
+   alertMessage('Kalit so‘z qo‘shish navbatida.',true);
+  }catch(err){alertMessage(err.message);}
+ };
  $('new-account').onclick=()=>{$('account-form').classList.toggle('hidden');};
  $('account-form').onsubmit=e=>{
   e.preventDefault();
