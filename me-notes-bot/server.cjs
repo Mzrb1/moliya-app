@@ -6,6 +6,7 @@ const http=require('node:http');
 const {randomUUID,timingSafeEqual}=require('node:crypto');
 const {createClient}=require('@libsql/client');
 const F=require('../me-notes-sahifalab/finance-core.js');
+const {listLineUpdateId,listRangeForId}=require('./list-utils.cjs');
 function env(key){const x=process.env[key];if(!x)throw Error('Missing '+key);return x;}
 const token=env('BOT_TOKEN');
 const secret=env('TELEGRAM_WEBHOOK_SECRET');
@@ -23,7 +24,8 @@ async function init(){
   "CREATE INDEX IF NOT EXISTS mn_idx_ws_uid ON mn_workspaces(uid)",
   "CREATE TABLE IF NOT EXISTS mn_transactions(id TEXT PRIMARY KEY, uid TEXT NOT NULL, workspace_id TEXT NOT NULL, update_id INTEGER NOT NULL UNIQUE, kind TEXT NOT NULL, category TEXT NOT NULL, amount INTEGER NOT NULL CHECK(amount>0), note TEXT, day TEXT NOT NULL, created TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS mn_idx_tx_day ON mn_transactions(workspace_id, day)",
-  "CREATE TABLE IF NOT EXISTS mn_budgets(workspace_id TEXT NOT NULL, month TEXT NOT NULL, category TEXT NOT NULL, limit_amount INTEGER NOT NULL CHECK(limit_amount>=0), PRIMARY KEY(workspace_id,month,category))"
+  "CREATE TABLE IF NOT EXISTS mn_budgets(workspace_id TEXT NOT NULL, month TEXT NOT NULL, category TEXT NOT NULL, limit_amount INTEGER NOT NULL CHECK(limit_amount>=0), PRIMARY KEY(workspace_id,month,category))",
+  "CREATE TABLE IF NOT EXISTS mn_processed_lists(update_id INTEGER PRIMARY KEY, uid TEXT NOT NULL, workspace_id TEXT NOT NULL, created TEXT NOT NULL)"
  ],'write');
 }
 async function api(method,params){
@@ -62,6 +64,7 @@ async function choose(uid){
  ]};
 }
 const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 mln oylik\n\n'+
+ '📋 Bir nechta xarajatni har qatorda yozing (20 tagacha):\nTushlik 98000\n18 ming yo‘lga\n\n'+
  '📁 /hisob — hisobni almashtirish\n📊 /hisobot — oylik natija\n🧮 /taqsimot — oylik pul rejasini ko‘rish\n'+
  '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni bekor qilish\n'+
  'ℹ️ /yordam — yordam\n\n'+
@@ -98,6 +101,77 @@ function salaryText(plan){
  return text+'\nBu haqiqiy pul o‘tkazmasi yoki qo‘shimcha xarajat emas. Mini App hisoblari hozircha chat bilan sinxron emas.';
 }
 
+async function saveTelegramList(update,uid,w,chat_id,raw){
+ const parsed=F.parseList(raw);
+ if(!parsed)return false;
+ if(parsed.errors.length){
+  const sample=parsed.errors.slice(0,5).map(e=>e.line+'-qator: '+e.reason).join('\n');
+  await send(chat_id,'⚠️ Ro‘yxatdagi ayrim qatorlarni tushunmadim:\n'+sample+
+   (parsed.errors.length>5?'\n... yana '+(parsed.errors.length-5)+' ta xato':'')+
+   '\n\n❌ Hech bir xarajat saqlanmadi. Qatorlarni tuzatib, ro‘yxatni qaytadan yuboring.');
+  return true;
+ }
+ const result=parsed.items.map((t,i)=>({
+  ...t,category:F.categoryFor({kind:w.kind,categories:F.BASE[w.kind]},t.kind,t.note),
+  id:randomUUID(),updateId:listLineUpdateId(update.update_id,i)
+ }));
+ // The durable marker survives /bekor, so Telegram retries can never recreate
+ // a list that a user has already deliberately undone.
+ const exists=await db.execute({sql:'SELECT update_id FROM mn_processed_lists WHERE update_id=?',args:[update.update_id]});
+ if(exists.rows.length)return true;
+ const day=today(),now=new Date().toISOString();
+ const commands=[
+  {sql:'INSERT INTO mn_processed_lists(update_id,uid,workspace_id,created) VALUES(?,?,?,?)',
+   args:[update.update_id,uid,w.id,now]},
+  ...result.map(t=>({
+   sql:'INSERT INTO mn_transactions(id,uid,workspace_id,update_id,kind,category,amount,note,day,created) VALUES(?,?,?,?,?,?,?,?,?,?)',
+   args:[t.id,uid,w.id,t.updateId,t.kind,t.category,t.amount,t.note,day,now]
+  }))
+ ];
+ try{
+  // libSQL batch("write") is a transaction: never save half a list.
+  await db.batch(commands,'write');
+ }catch(error){
+  // Another webhook retry can race with the first request.
+  const already=await db.execute({sql:'SELECT update_id FROM mn_processed_lists WHERE update_id=?',args:[update.update_id]});
+  if(already.rows.length)return true;
+  throw error;
+ }
+ const totals={income:0,expense:0},cats=new Map();
+ const lines=result.map((t,i)=>{
+  totals[t.kind]+=t.amount;
+  if(t.kind==='expense')cats.set(t.category,(cats.get(t.category)||0)+t.amount);
+  return (i+1)+'. '+(t.kind==='income'?'➕ ':'➖ ')+t.category+
+   ' — '+F.money(t.amount)+' ('+t.note.slice(0,70)+')';
+ });
+ let answer='✅ '+result.length+' ta yozuv saqlandi\n📁 '+w.name+'\n\n'+lines.join('\n')+
+  '\n\n➖ Jami xarajat: '+F.money(totals.expense)+
+  (totals.income?'\n➕ Jami daromad: '+F.money(totals.income):'');
+ const warnings=[];
+ if(cats.size){
+  const prior=await db.execute({sql:"SELECT category,COALESCE(SUM(amount),0) AS total FROM mn_transactions WHERE workspace_id=? AND kind='expense' AND day>=? AND day<? GROUP BY category",
+   args:[w.id,thisMonth()+'-01',nextMonth(thisMonth())+'-01']});
+  const full=Object.fromEntries(prior.rows.map(row=>[String(row.category),Number(row.total)]));
+  const budget=await db.execute({sql:'SELECT category,limit_amount FROM mn_budgets WHERE workspace_id=? AND month=?',args:[w.id,thisMonth()]});
+  const fixed=Object.fromEntries(budget.rows.map(row=>[String(row.category),Number(row.limit_amount)]));
+  const plan=await monthlySalaryPlan(uid,w);
+  for(const [cat,added] of cats){
+   const limit=(fixed[cat]||0) || (plan?.targets[cat]?.limit||0);
+   if(limit<=0)continue;
+   const after=full[cat]||0,before=after-added;
+   if(before<limit&&after>=limit)warnings.push('⛔ '+cat+': oylik limit tugadi yoki oshdi.');
+   else if(before<limit*.8&&after>=limit*.8)warnings.push('⚠️ '+cat+': limitning 80% iga yetdingiz.');
+  }
+ }
+ if(warnings.length)answer+='\n\n'+warnings.join('\n');
+ if(result.some(x=>x.kind==='income'&&x.category==='Maosh')&&w.kind==='personal'){
+  answer+='\n\n🧮 Oylik reja yangilandi. /taqsimot';
+ }
+ answer+='\n↩️ Butun ro‘yxatni bekor qilish: /bekor';
+ await send(chat_id,answer.slice(0,3900));
+ return true;
+}
+
 async function handleMessage(update){
  const m=update.message;
  if(!m||m.chat?.type!=='private'||m.chat.id!==m.from?.id||typeof m.text!=='string')return;
@@ -115,9 +189,18 @@ async function handleMessage(update){
   return;
  }
  if(command==='/bekor'){
-  const q=await db.execute({sql:'SELECT id,category,amount FROM mn_transactions WHERE uid=? AND workspace_id=? ORDER BY created DESC,rowid DESC LIMIT 1',args:[uid,w.id]});
+  const q=await db.execute({sql:'SELECT id,update_id,category,amount FROM mn_transactions WHERE uid=? AND workspace_id=? ORDER BY rowid DESC LIMIT 1',args:[uid,w.id]});
   if(!q.rows.length){await send(chat_id,'Bekor qilinadigan yozuv yo‘q.');return;}
-  const t=q.rows[0];
+  const t=q.rows[0],tag=Number(t.update_id);
+  if(tag<0){
+   const {lower,upper}=listRangeForId(tag);
+   const rows=await db.execute({sql:'SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS total FROM mn_transactions WHERE uid=? AND workspace_id=? AND update_id BETWEEN ? AND ?',
+    args:[uid,w.id,lower,upper]});
+   await db.execute({sql:'DELETE FROM mn_transactions WHERE uid=? AND workspace_id=? AND update_id BETWEEN ? AND ?',
+    args:[uid,w.id,lower,upper]});
+   await send(chat_id,'↩️ Oxirgi ro‘yxatdagi '+Number(rows.rows[0].n)+' ta yozuv bekor qilindi. Jami '+F.money(Number(rows.rows[0].total))+' qaytarildi (hisobiy).');
+   return;
+  }
   await db.execute({sql:'DELETE FROM mn_transactions WHERE id=? AND workspace_id=? AND uid=?',args:[t.id,w.id,uid]});
   await send(chat_id,'↩️ Bekor qilindi: '+t.category+' '+F.money(t.amount));return;
  }
@@ -131,6 +214,7 @@ async function handleMessage(update){
   await send(chat_id,'🎯 '+cat+' uchun limit: '+F.money(parsed.amount));return;
  }
  if(command.startsWith('/')){await send(chat_id,'Buyruq topilmadi. /yordam');return;}
+ if(await saveTelegramList(update,uid,w,chat_id,text))return;
  let parsed;try{parsed=F.parseFast(text);}catch(e){parsed=null;}
  if(!parsed){await send(chat_id,'Yozuvni tushunmadim. Masalan:\n25 ming taksi\n+3 mln oylik');return;}
  const cat=F.categoryFor({kind:w.kind,categories:F.BASE[w.kind]},parsed.kind,parsed.note);

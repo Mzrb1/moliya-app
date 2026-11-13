@@ -128,6 +128,30 @@ function parseFast(raw){
  if(!Number.isSafeInteger(total)||total<1||total>MAX)return null;
  return {kind,amount:amount(total),note};
 }
+// Telegram ro‘yxati: har bir qator — bitta alohida operatsiya.
+// Bittasi xato bo‘lsa, server birortasini ham bazaga kiritmaydi.
+function parseList(raw){
+ const input=String(raw??'');
+ if(!/[\r\n]/.test(input))return null;
+ const lines=input.split(/\r?\n/).map(t=>t.trim()).filter(Boolean);
+ if(lines.length>1&&/^(?:bugungi\s+)?(?:xarajat(?:lar(?:im)?)?|kirim(?:lar)?|ro['‘ʻ]yxat|royxat)(?:\s+(?:ro['‘ʻ]yxati|royxati))?\s*:?$/i.test(lines[0])){
+  lines.shift();
+ }
+ if(!lines.length)return {items:[],errors:[{line:1,reason:'Ro‘yxat bo‘sh'}]};
+ if(lines.length>20)return {items:[],errors:[{line:21,reason:'Bir xabarda eng ko‘pi 20 ta yozuv bo‘lsin'}]};
+ if(input.length>3500)return {items:[],errors:[{line:1,reason:'Xabar juda uzun (3500 belgidan oshmasin)'}]};
+ const items=[],errors=[];
+ for(let i=0;i<lines.length;i++){
+  const line=lines[i];
+  const clean=line.replace(/^(?:[•●▪◦*]|[-–—]|\d{1,2}[.)-])\s+/u,'').trim();
+  let parsed=null;
+  try{parsed=parseFast(clean);}catch(e){parsed=null;}
+  if(!parsed)errors.push({line:i+1,reason:line.slice(0,100)});
+  else items.push({...parsed,line:i+1});
+ }
+ return {items,errors};
+}
+
 function categoryFor(w,kind,note){
  if(!['income','expense'].includes(kind))throw Error('Operatsiya turi noto‘g‘ri');
  const value=normalizeKeyword(note);
@@ -305,5 +329,5 @@ function validate(raw){
  return result;
 }
 function csv(w){const quote=v=>{let s=String(v??'');if(/^[\s]*[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};return '\ufeff'+[['Sana','Hisob','Turi','Kategoriya','Summa','Izoh'],...w.transactions.map(t=>[t.date,w.name,t.kind==='income'?'Daromad':'Xarajat',t.category,t.amount,t.note])].map(r=>r.map(quote).join(';')).join('\r\n');}
-return {KINDS,BASE,SALARY_RATES,HOUSEHOLD_WEIGHTS,SALARY_BUCKETS,splitSalary,salaryAllocation,effectiveCategoryLimit,KEYWORD_RULES,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,validate,csv,spent};
+return {KINDS,BASE,SALARY_RATES,HOUSEHOLD_WEIGHTS,SALARY_BUCKETS,splitSalary,salaryAllocation,effectiveCategoryLimit,KEYWORD_RULES,parseList,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,validate,csv,spent};
 });
