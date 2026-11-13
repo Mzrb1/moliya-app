@@ -309,6 +309,57 @@ function renderSettings(data){
  }
 }
 
+function renderMonthHistory(){
+ const host=$('month-history');if(!host)return;
+ host.replaceChildren();
+ const data=compute();
+ const known=state.months||[];
+ if(!known.length)host.append(el('p','tiny','Oldingi oylar ro‘yxati serverga ulanganda ko‘rinadi.'));
+ for(const item of known){
+  const block=el('div','line row between'),details=el('div','grow');
+  details.append(el('div','strong',item.month+' · '+(item.closed_at?'🗃 Arxiv':'Ochiq')));
+  details.append(el('div','tiny',item.count+' ta yozuv · kirim '+money(item.income)+' · chiqim '+money(item.expense)));
+  const show=el('button','btn alt','Ko‘rish');show.type='button';
+  show.style.cssText='min-height:32px;padding:6px 10px;font-size:12px';
+  show.disabled=state.month===item.month;
+  show.onclick=()=>changeMonth(item.month);
+  block.append(details,show);host.append(block);
+ }
+ const closed=!!data?.closedAt,current=F.today().slice(0,7);
+ $('month-archive-status').textContent=state.month+' — '+(closed?'arxivlangan (faqat o‘qish)':
+  state.month>=current?'joriy yoki kelajak oy (yakunlab bo‘lmaydi)':'ochiq o‘tgan oy');
+ $('archive-close').disabled=!data||closed||state.month>=current||!state.online||!!state.queue.length;
+ $('archive-reopen').disabled=!data||!closed||!state.online||!!state.queue.length;
+ $('archive-export').disabled=!data||!state.online||!!state.queue.length;
+}
+async function changeMonth(month){
+ if(!F.validMonth(month))return;
+ state.month=month;
+ closeEdit();
+ render();
+ try{await fetchLedger();render();alertMessage('');}
+ catch(e){alertMessage('Bu oy ma’lumotlarini yuklash xatosi: '+e.message);}
+}
+async function archiveAction(action){
+ if(!current())return;
+ if(state.queue.length){alertMessage('Avval sinxronlash navbatini bo‘shating. Arxivlashda hech bir yozuvni yo‘qotmasligimiz kerak.');return;}
+ const month=state.month,closed=!!compute()?.closedAt;
+ if(action==='month_close'){
+  if(closed||month>=F.today().slice(0,7)){alertMessage('Faqat tugagan, hali arxivlanmagan oyni yakunlash mumkin.');return;}
+  if(!confirm(month+' oyining yozuvlari o‘chirilmaydi, lekin tahrirlash bloklanadi. Avval oylik JSON faylini yuklab olganmisiz?'))return;
+  if(!confirm('Oyni arxiv sifatida yakunlashni tasdiqlaysizmi? Keyin Qayta ochish mumkin.'))return;
+ }else{
+  if(!closed){alertMessage('Bu oy arxivlangan emas.');return;}
+  if(!confirm(month+' oyini tahrirlash uchun qayta ochasizmi?'))return;
+ }
+ try{
+  const op=newOp({action,month});
+  await request('/op',{method:'POST',body:op});
+  await fetchLedger();await fetchMonthHistory();
+  render();alertMessage(month+(action==='month_close'?' arxivlandi. Eski yozuvlar Turso’da saqlangan.':' qayta ochildi.'),true);
+ }catch(e){alertMessage('Oy holatini o‘zgartirib bo‘lmadi: '+e.message);}
+}
+
 function render(){
  const w=current(),data=compute();
  $('app').classList.toggle('hidden',!w);
@@ -429,18 +480,17 @@ function setup(){
  $('month').value=state.month;
  document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('click',()=>chooseView(btn.dataset.view)));
  $('open-settings').onclick=()=>chooseView('settings');
- $('month').onchange=async()=>{
-  state.month=$('month').value;if(!F.validMonth(state.month))state.month=F.today().slice(0,7);
-  render();try{await fetchLedger();render();}catch(e){noteStatus('Offline: eski ma’lumot ko‘rsatilmoqda');}
- };
+ $('month').onchange=()=>changeMonth($('month').value);
  $('workspace').onchange=()=>{
-  state.active=$('workspace').value;
-  try{enqueue({action:'switch'});fetchLedger().then(render).catch(()=>{});}catch(e){alertMessage(e.message);}
+  state.active=$('workspace').value;state.months=[];closeEdit();
+  try{enqueue({action:'switch'});Promise.all([fetchLedger(),fetchMonthHistory()]).then(render).catch(e=>alertMessage(e.message));}
+  catch(e){alertMessage(e.message);}
  };
  $('quick-text').addEventListener('input',showPreview);
  $('quick-form').onsubmit=e=>{
   e.preventDefault();
   try{
+   if(state.month!==F.today().slice(0,7))throw Error('Hozir boshqa oy ko‘rinmoqda. Yozuv kiritish uchun joriy oyni tanlang.');
    const parts=parseInput($('quick-text').value);
    enqueue(parts.length===1?{action:'add',entry:parts[0]}:{action:'add_many',entries:parts});
    $('quick-text').value='';showPreview();
@@ -460,6 +510,7 @@ function setup(){
    const kind=$('manual-kind').value,amount=F.amount(Number($('manual-amount').value)),
     date=$('manual-date').value,category=$('manual-category').value,note=$('manual-note').value.trim();
    if(!F.validDay(date)||!note)throw Error('Sana va izohni tekshiring');
+   if(state.base[state.active+'|'+date.slice(0,7)]?.closed_at)throw Error('Bu oy arxivlangan. Avval uni qayta oching.');
    enqueue({action:'add',entry:{kind,amount,date,category,note}});
    $('manual-form').reset();$('manual-date').value=F.today();
    fillCategory('manual-category','expense');
@@ -476,6 +527,7 @@ function setup(){
     category:$('edit-category').value,amount:F.amount(Number($('edit-amount').value)),
     note:$('edit-note').value.trim()};
    if(!F.validDay(entry.date)||!entry.note)throw Error('Sana yoki izoh noto‘g‘ri');
+   if(compute()?.closedAt)throw Error('Bu oy arxivlangan, avval oyni qayta oching');
    enqueue({action:'edit',transaction_id:editingId,entry});
    closeEdit();alertMessage('O‘zgarish saqlash navbatiga qo‘shildi.',true);
   }catch(err){alertMessage(err.message);}
@@ -531,8 +583,20 @@ function setup(){
  };
  $('confirm-import').onclick=importLegacy;
  $('retry-connect').onclick=pull;
+ $('archive-export').onclick=exportData;
+ $('archive-close').onclick=()=>archiveAction('month_close');
+ $('archive-reopen').onclick=()=>archiveAction('month_reopen');
  $('sync-now').onclick=pull;
  $('export-data').onclick=exportData;
+ window.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible')return;
+  const now=F.today().slice(0,7);
+  if(now!==state.seenToday){
+   if(state.month===state.seenToday)state.month=now;
+   state.seenToday=now;
+   render();if(navigator.onLine)pull();
+  }
+ });
  window.addEventListener('online',()=>{flush();pull();});
  window.addEventListener('offline',()=>{state.online=false;noteStatus();});
  if('serviceWorker' in navigator)navigator.serviceWorker.register('./finance-sw.js').catch(()=>{});
