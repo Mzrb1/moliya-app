@@ -62,7 +62,7 @@ async function choose(uid){
  ]};
 }
 const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 mln oylik\n\n'+
- '📁 /hisob — hisobni almashtirish\n📊 /hisobot — oylik natija\n'+
+ '📁 /hisob — hisobni almashtirish\n📊 /hisobot — oylik natija\n🧮 /taqsimot — oylik pul rejasini ko‘rish\n'+
  '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni bekor qilish\n'+
  'ℹ️ /yordam — yordam\n\n'+
  'Eslatma: chat hisoblari hozircha Mini Appning telefon xotirasi bilan sinxronlanmaydi.';
@@ -71,6 +71,33 @@ function checkSecret(input){
  const a=Buffer.from(input),b=Buffer.from(secret);
  return a.length===b.length&&timingSafeEqual(a,b);
 }
+// Chatdagi rejalar serverdagi TURSO yozuvlaridan hisoblanadi, Mini App localStorage’dan emas.
+async function monthlySalaryPlan(uid,w){
+ if(w.kind!=='personal')return null;
+ const range=thisMonth();
+ const q=await db.execute({sql:"SELECT amount,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND kind='income' AND category='Maosh' AND day>=? AND day<?",
+ args:[uid,w.id,range+'-01',nextMonth(range)+'-01']});
+ if(!q.rows.length)return null;
+ const b=await db.execute({sql:'SELECT category,limit_amount FROM mn_budgets WHERE workspace_id=? AND month=?',args:[w.id,range]});
+ const hard=Object.fromEntries(b.rows.map(row=>[row.category,Number(row.limit_amount)]));
+ const temp={kind:'personal',categories:F.BASE.personal,transactions:q.rows.map(row=>({kind:'income',category:'Maosh',amount:Number(row.amount),date:String(row.day)})),budgets:{[range]:hard}};
+ return F.salaryAllocation(temp,range);
+}
+function salaryText(plan){
+ if(!plan)return 'Hozircha bu oyda shaxsiy hisobga Maosh kategoriyasida daromad kiritilmagan. Misol: +5 mln oylik';
+ const f=F.money;
+ let text='🧮 Oylik taqsimot ('+plan.month+')\n'+
+   '💰 Jami maosh: '+f(plan.salary)+'\n'+
+   '🤲 Ehson: '+f(plan.ehson)+'\n'+
+   '🌱 Kelajak: '+f(plan.kelajak)+'\n'+
+   '🎉 O‘yin-kulgi: '+f(plan.oyin)+'\n'+
+   '🏠 Ro‘zg‘or: '+f(plan.rozgor)+'\n'+
+   '💼 Biznes: '+f(plan.biznes)+'\n';
+ if(plan.hardShortfall>0)text+='\n⚠️ Ro‘zg‘or qat’iy limitlariga '+f(plan.hardShortfall)+' YETMAYDI. Qat’iy limitlar o‘zgarmadi.\n';
+ if(plan.leisureShortfall>0)text+='\n⚠️ Dam olish qat’iy limitiga '+f(plan.leisureShortfall)+' YETMAYDI.\n';
+ return text+'\nBu haqiqiy pul o‘tkazmasi yoki qo‘shimcha xarajat emas. Mini App hisoblari hozircha chat bilan sinxron emas.';
+}
+
 async function handleMessage(update){
  const m=update.message;
  if(!m||m.chat?.type!=='private'||m.chat.id!==m.from?.id||typeof m.text!=='string')return;
@@ -79,6 +106,7 @@ async function handleMessage(update){
  if(command==='/start'){await send(chat_id,'Assalomu alaykum! 👋\n'+help,{reply_markup:await choose(uid)});return;}
  if(command==='/hisob'){await send(chat_id,'Hozirgi hisob: '+w.name+'\nHisobni tanlang:',{reply_markup:await choose(uid)});return;}
  if(command==='/yordam'||command==='/help'){await send(chat_id,help);return;}
+ if(command==='/taqsimot'){await send(chat_id,salaryText(await monthlySalaryPlan(uid,w)));return;}
  if(command==='/hisobot'){
   const q=await db.execute({sql:'SELECT kind, SUM(amount) AS total FROM mn_transactions WHERE workspace_id=? AND day>=? AND day<? GROUP BY kind',args:[w.id,thisMonth()+'-01',nextMonth(thisMonth())+'-01']});
   const totals=Object.fromEntries(q.rows.map(r=>[r.kind,Number(r.total)]));
@@ -114,11 +142,14 @@ async function handleMessage(update){
  let warning='';
  if(parsed.kind==='expense'){
   const q=await db.execute({sql:'SELECT limit_amount FROM mn_budgets WHERE workspace_id=? AND month=? AND category=?',args:[w.id,thisMonth(),cat]});
-  const limit=Number(q.rows[0]?.limit_amount||0),after=before+parsed.amount;
+  const fixed=Number(q.rows[0]?.limit_amount||0);
+   const plan=await monthlySalaryPlan(uid,w);
+   const limit=fixed>0?fixed:(plan?.targets[cat]?.limit||0),after=before+parsed.amount;
   if(limit>0&&before<limit&&after>=limit)warning='\n⛔ Limit tugadi yoki oshdi!';
   else if(limit>0&&before<.8*limit&&after>=.8*limit)warning='\n⚠️ Limitning 80% iga yetdingiz.';
  }
- await send(chat_id,(parsed.kind==='income'?'✅ Daromad':'✅ Xarajat')+' saqlandi\n📁 '+w.name+'\n🏷 '+cat+'\n💰 '+F.money(parsed.amount)+'\n📝 '+parsed.note+warning+'\nXato bo‘lsa: /bekor');
+ const salaryInfo=(parsed.kind==='income'&&cat==='Maosh'&&w.kind==='personal')?'\n\n'+salaryText(await monthlySalaryPlan(uid,w)):'';
+ await send(chat_id,(parsed.kind==='income'?'✅ Daromad':'✅ Xarajat')+' saqlandi\n📁 '+w.name+'\n🏷 '+cat+'\n💰 '+F.money(parsed.amount)+'\n📝 '+parsed.note+warning+salaryInfo+'\nXato bo‘lsa: /bekor');
 }
 async function handleCallback(update){
  const cb=update.callback_query;
