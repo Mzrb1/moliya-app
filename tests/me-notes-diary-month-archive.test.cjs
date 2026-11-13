@@ -78,3 +78,16 @@ test('Diary archival cannot mutate the current calendar month in memory',()=>{
  assert.equal(orig.transactions.length,2);
  assert.equal(Object.keys(orig.archivedMonths).length,0);
 });
+
+
+test('Monthly JSON cannot overwrite full Sahifalab lessons on import',()=>{
+ const backup=A.monthBackup(source(),'2026-10');
+ assert.throws(()=>A.validateFullBackup(backup),/bir oylik/);
+ assert.throws(()=>A.validateFullBackup({format:'me-notes-finance-month-v1',transactions:[]}),/bir oylik/);
+});
+test('Valid full Sahifalab data still restores after guard',()=>{
+ const data={version:1,transactions:[],assets:{},debts:{},estimated:{income:{},fixed:{},variable:{}},
+ reflections:{q1:'',q2:'',q3:''},goal:{text:'',start:'2026-11-14'},promise:{days:[]}};
+ assert.equal(A.validateFullBackup(data),true);
+ assert.throws(()=>A.validateFullBackup({transactions:[]} ),/To‘liq/);
+});
