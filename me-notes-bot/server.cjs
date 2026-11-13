@@ -7,6 +7,7 @@ const {randomUUID,timingSafeEqual}=require('node:crypto');
 const {createClient}=require('@libsql/client');
 const F=require('../me-notes-sahifalab/finance-core.js');
 const {listLineUpdateId,listRangeForId}=require('./list-utils.cjs');
+const {makeFinanceApi}=require('./miniapp-api.cjs');
 function env(key){const x=process.env[key];if(!x)throw Error('Missing '+key);return x;}
 const token=env('BOT_TOKEN');
 const secret=env('TELEGRAM_WEBHOOK_SECRET');
@@ -15,6 +16,7 @@ const authToken=env('TURSO_AUTH_TOKEN');
 if(!/^[A-Za-z0-9_-]{1,256}$/.test(secret))throw Error('Invalid webhook secret');
 if(!/^(libsql|https):\/\//.test(url))throw Error('Only secure Turso remote URLs supported');
 const db=createClient({url,authToken});
+const financeApi=makeFinanceApi({db,botToken:token,ensure:uid=>ensure(uid)});
 const today=()=>F.today(),thisMonth=()=>today().slice(0,7);
 const nextMonth=m=>{const [y,n]=m.split('-').map(Number);return (n===12?y+1:y)+'-'+String(n===12?1:n+1).padStart(2,'0');};
 async function init(){
@@ -58,6 +60,7 @@ async function active(uid){
 async function choose(uid){
  const q=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? ORDER BY created',args:[uid]});
  return {inline_keyboard:[
+  [{text:'📱 Yagona moliya — Mini App (sinov)',web_app:{url:'https://me-notes-sahifalab.onrender.com/finance-unified.html'}}],
   ...q.rows.map(w=>[{text:w.name+' ('+F.KINDS[w.kind]+')',callback_data:'use:'+w.id}]),
   [{text:'➕ Shaxsiy',callback_data:'new:personal'},{text:'➕ Oilaviy',callback_data:'new:family'}],
   [{text:'➕ Biznes',callback_data:'new:business'}]
@@ -67,7 +70,8 @@ const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 m
  '📋 Bir nechta xarajatni har qatorda yozing (20 tagacha):\nTushlik 98000\n18 ming yo‘lga\n\n'+
  '📁 /hisob — hisobni almashtirish\n📊 /hisobot — oylik natija\n🧮 /taqsimot — oylik pul rejasini ko‘rish\n'+
  '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni bekor qilish\n'+
- 'ℹ️ /yordam — yordam\n\n'+
+ 'ℹ️ /yordam — yordam\n'+
+ '📱 /start — Yagona moliya Mini App tugmasi\n\n'+
  'Eslatma: chat hisoblari hozircha Mini Appning telefon xotirasi bilan sinxronlanmaydi.';
 function checkSecret(input){
  if(typeof input!=='string')return false;
@@ -261,9 +265,14 @@ async function handleCallback(update){
 }
 async function main(){
  await init();
+ await financeApi.init();
  http.createServer(async(req,res)=>{
   if(req.url==='/health'&&req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}');return;}
   if(req.url!=='/telegram/webhook'||req.method!=='POST'){res.writeHead(404);res.end();return;}
+  if(req.url?.startsWith('/api/v1/')){
+   await financeApi.handle(req,res);
+   return;
+  }
   if(!checkSecret(req.headers['x-telegram-bot-api-secret-token'])){res.writeHead(403);res.end();return;}
   try{
    let body='';for await(const part of req){body+=part;if(body.length>64000){res.writeHead(413);res.end();return;}}
