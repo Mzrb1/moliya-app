@@ -181,12 +181,16 @@ function displayRows(target,items,limit=100){
   const end=el('div');end.style.textAlign='right';
   end.append(el('div','strong '+(t.kind==='income'?'green':'red'),sign+money(t.amount)));
   if(target==='records'&&!t.id.startsWith('pending:')){
-   const button=el('button','btn warning','O‘chirish');button.style.cssText='font-size:11px;padding:5px 8px;min-height:30px;margin-top:5px';
+   const edit=el('button','btn alt','Tahrirlash');
+   edit.type='button';edit.style.cssText='font-size:11px;padding:5px 8px;min-height:30px;margin-top:5px';
+   edit.onclick=()=>openEdit(t);
+   const button=el('button','btn warning','O‘chirish');
+   button.style.cssText='font-size:11px;padding:5px 8px;min-height:30px;margin:5px 0 0 4px';
    button.type='button';
    button.onclick=()=>{
-    if(confirm('Shu xarajatni o‘chirasizmi?')){try{enqueue({action:'delete',transaction_id:t.id});}catch(e){alertMessage(e.message);}}
+    if(confirm('Shu yozuvni o‘chirasizmi?')){try{enqueue({action:'delete',transaction_id:t.id});}catch(e){alertMessage(e.message);}}
    };
-   end.append(button);
+   end.append(edit,button);
   }
   row.append(info,end);dest.append(row);
  }
@@ -225,6 +229,80 @@ function renderBudgets(data){
   block.append(actions);dest.append(block);
  }
 }
+function fillCategory(id,kind,selected){
+ const d=compute();
+ const list=d?.prefs?.categories?.[kind]||F.BASE[current()?.kind||'personal'][kind]||[];
+ const select=$(id),value=selected??select.value;
+ select.replaceChildren(...list.map(cat=>{const opt=el('option');opt.value=cat;opt.textContent=cat;return opt;}));
+ select.value=list.includes(value)?value:(list.includes('Boshqa')?'Boshqa':list[0]||'');
+}
+function openEdit(tx){
+ editingId=tx.id;
+ $('edit-kind').value=tx.kind;
+ $('edit-date').value=tx.date;
+ $('edit-amount').value=String(tx.amount);
+ $('edit-note').value=tx.note;
+ fillCategory('edit-category',tx.kind,tx.category);
+ $('edit-card').classList.remove('hidden');
+ chooseView('records');
+ $('edit-card').scrollIntoView?.({behavior:'smooth'});
+}
+function closeEdit(){
+ editingId=null;
+ $('edit-card').classList.add('hidden');
+}
+function renderReport(data){
+ $('report-income').textContent=money(data.summary.income);
+ $('report-expense').textContent=money(data.summary.expense);
+ $('report-net').textContent=money(data.summary.net);
+ const host=$('report-categories');host.replaceChildren();
+ const sums=new Map();
+ for(const tx of data.items){
+  if(tx.kind==='expense')sums.set(tx.category,(sums.get(tx.category)||0)+tx.amount);
+ }
+ const entries=[...sums].sort((a,b)=>b[1]-a[1]);
+ if(!entries.length){host.append(el('p','empty','Bu oyda hali xarajat yo‘q.'));}
+ for(const [category,value] of entries){
+  const ratio=data.summary.expense?Math.round(value/data.summary.expense*100):0;
+  const block=el('div','line');block.append(line(category,money(value),ratio+'% · jami chiqimdagi ulushi'));
+  const bar=el('div','bar'),fill=el('div','bar-fill');fill.style.width=ratio+'%';bar.append(fill);block.append(bar);host.append(block);
+ }
+ $('report-sync').textContent=state.queue.length?
+  state.queue.length+' ta operatsiya hali telefon navbatida. Sinxronlangandan keyin chat hisobotiga ham tushadi.':
+  state.online?'Yozuvlar chat bilan bitta Turso bazasida saqlanadi.':'Hozir eski saqlangan natija; internet bilan sinxronlashni tekshiring.';
+}
+function renderSettings(data){
+ const opts=data.prefs.categories,selector=$('settings-kind'),kind=selector.value||'expense',sel=$('settings-category'),wanted=sel.value;
+ sel.replaceChildren(...opts[kind].map(x=>{const o=el('option');o.value=x;o.textContent=x;return o;}));
+ if(opts[kind].includes(wanted))sel.value=wanted;
+ const selected=sel.value,aliases=data.prefs.keywords[kind]?.[selected]||[];
+ const list=$('category-list');list.replaceChildren();
+ const customs=opts[kind].filter(x=>!F.BASE[data.w.kind][kind].includes(x));
+ if(!customs.length)list.append(el('p','tiny','Qo‘shimcha kategoriya hali yaratilmagan.'));
+ for(const c of customs){
+  const container=line(c,'','Qo‘shimcha kategoriya');
+  const button=el('button','btn warning','O‘chirish');button.type='button';
+  button.style.cssText='min-height:30px;padding:5px 8px;font-size:11px';
+  button.onclick=()=>{
+   if(!confirm('"'+c+'" kategoriyasini o‘chirasizmi? Unda yozuv yoki limit bo‘lsa server rad etadi.'))return;
+   try{enqueue({action:'category_delete',kind,name:c});}catch(e){alertMessage(e.message);}
+  };
+  container.append(button);list.append(container);
+ }
+ const host=$('keyword-list');host.replaceChildren();
+ if(!aliases.length)host.append(el('p','tiny','Maxsus kalit so‘zlar qo‘shilmagan.'));
+ for(const word of aliases){
+  const row=el('div','row between line'),name=el('span','strong',word);
+  const remove=el('button','btn alt','Olib tashlash');remove.type='button';
+  remove.style.cssText='font-size:11px;padding:5px 8px;min-height:30px';
+  remove.onclick=()=>{
+   if(!confirm('“'+word+'” kalit so‘zini olib tashlaysizmi?'))return;
+   try{enqueue({action:'keyword_delete',kind,category:selected,word});}catch(e){alertMessage(e.message);}
+  };
+  row.append(name,remove);host.append(row);
+ }
+}
+
 function render(){
  const w=current(),data=compute();
  $('app').classList.toggle('hidden',!w);
@@ -240,7 +318,11 @@ function render(){
  $('expense').textContent=money(data.summary.expense);
  displayRows('recent',data.items,3);
  displayRows('records',data.items,150);
- renderPlan(data);renderBudgets(data);noteStatus();
+ renderPlan(data);renderBudgets(data);
+ renderReport(data);renderSettings(data);
+ fillCategory('manual-category',$('manual-kind').value);
+ if(editingId)fillCategory('edit-category',$('edit-kind').value);
+ noteStatus();
 }
 function parseInput(raw){
  const list=F.parseList(raw);
