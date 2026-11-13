@@ -275,6 +275,12 @@ function importLegacy(){
    const chunk=transactions.slice(i,i+20).map(t=>({source_id:t.id,kind:t.kind,category:t.category,amount:t.amount,note:t.note,date:t.date}));
    pieces.push(newOp({action:'import',source_workspace:original.id,source_kind:original.kind,entries:chunk}));
   }
+  const oldBudgets=Object.entries(original.budgets||{}).flatMap(([month,items])=>Object.entries(items||{})
+   .filter(([cat,limit])=>F.BASE[dest.kind].expense.includes(cat)&&Number.isSafeInteger(limit)&&limit>0)
+   .map(([cat,limit])=>({action:'budget',month,category:cat,limit})));
+  if(oldBudgets.length&&confirm('Eski hisobdagi '+oldBudgets.length+' ta QAT’IY limit ham ko‘chirilsinmi? Bu yangi hisobdagi shu oy/kategoriya limitini almashtirishi mumkin.')){
+   for(const budget of oldBudgets)pieces.push(newOp(budget));
+  }
   if(state.queue.length+pieces.length>250)throw Error('Sinxronlash navbati to‘lgan, avval mavjud amallarni yuboring');
   if(!state.storageOK)throw Error('Mahalliy xotirada saqlash imkoni yo‘q');
   state.queue.push(...pieces);
