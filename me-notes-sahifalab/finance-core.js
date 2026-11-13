@@ -145,6 +145,77 @@ function categoryFor(w,kind,note){
  }
  return w.categories[kind].at(-1);
 }
+// ME Notes oylik taqsimot (foizlar testdan o‘tganicha tasdiqlangan).
+// Maosh real daromad sifatida bitta yozuv; bu summalar yangi xarajat EMAS.
+const SALARY_RATES=Object.freeze({ehson:250,kelajak:1000,oyin:1000,rozgor:4500,biznes:5500});
+const HOUSEHOLD_WEIGHTS=Object.freeze({"Oziq-ovqat":35,"Transport":15,"Uy-ro'zg'or":10,"Kommunal":15,"Sog'liq":10,"Kiyim":5,"Ta'lim":5,"Boshqa":5});
+const SALARY_BUCKETS=[['ehson','Ehson'],['kelajak','Kelajak'],['oyin','O‘yin-kulgi'],['rozgor','Ro‘zg‘or'],['biznes','Biznes']];
+function splitSalary(value){
+ const salary=amount(value);
+ const ehson=Math.round(salary*SALARY_RATES.ehson/10000);
+ const base=salary-ehson;
+ const kelajak=Math.round(base*SALARY_RATES.kelajak/10000);
+ const oyin=Math.round(base*SALARY_RATES.oyin/10000);
+ const remainder=salary-ehson-kelajak-oyin;
+ const rozgor=Math.round(remainder*SALARY_RATES.rozgor/10000);
+ const biznes=remainder-rozgor;
+ return {salary,ehson,kelajak,oyin,rozgor,biznes};
+}
+// Faqat SHAXSIY hisobdagi Maosh kategoriya daromadlarini rejalashtiramiz.
+// Boshqa turdagi hisoblarga pul avtomatik ko‘chmaydi.
+function salaryAllocation(w,month){
+ if(!validMonth(month))throw Error('Oy noto‘g‘ri');
+ if(w.kind!=='personal')return null;
+ const salaries=w.transactions.filter(t=>t.kind==='income'&&t.category==='Maosh'&&t.date.slice(0,7)===month);
+ if(!salaries.length)return null;
+ const buckets={salary:0,ehson:0,kelajak:0,oyin:0,rozgor:0,biznes:0};
+ for(const tx of salaries){
+  const part=splitSalary(tx.amount);
+  for(const key of Object.keys(buckets))buckets[key]+=part[key];
+ }
+ const hard=w.budgets[month]||{};
+ const targets={};
+ const group=Object.keys(HOUSEHOLD_WEIGHTS).filter(cat=>w.categories.expense.includes(cat));
+ const fixed=group.filter(cat=>Number(hard[cat])>0);
+ const fixedSum=fixed.reduce((sum,cat)=>sum+Number(hard[cat]),0);
+ const available=Math.max(0,buckets.rozgor-fixedSum);
+ const flexible=group.filter(cat=>!fixed.includes(cat));
+ const weightTotal=flexible.reduce((sum,cat)=>sum+HOUSEHOLD_WEIGHTS[cat],0);
+ // Largest-remainder usuli: kichik summalarda ham limitlar musbat va jami aniq.
+ const shares=flexible.map((cat,i)=>{
+  const exact=weightTotal?available*HOUSEHOLD_WEIGHTS[cat]/weightTotal:0;
+  return {cat,i,value:Math.floor(exact),fraction:exact-Math.floor(exact)};
+ });
+ let pieces=available-shares.reduce((sum,x)=>sum+x.value,0);
+ for(const x of [...shares].sort((a,b)=>b.fraction-a.fraction||a.i-b.i)){
+  if(pieces<=0)break;
+  x.value++;pieces--;
+ }
+ let distributed=0;
+ for(const x of shares){
+  distributed+=x.value;
+  targets[x.cat]={limit:x.value,mode:'auto',bucket:'rozgor'};
+ }
+ for(const cat of fixed)targets[cat]={limit:Number(hard[cat]),mode:'fixed',bucket:'rozgor'};
+ if(w.categories.expense.includes('Dam olish')){
+  targets['Dam olish']={limit:Number(hard['Dam olish'])>0?Number(hard['Dam olish']):buckets.oyin,mode:Number(hard['Dam olish'])>0?'fixed':'auto',bucket:'oyin'};
+ }
+ for(const cat of w.categories.expense){
+  if(!(cat in targets)&&Number(hard[cat])>0)targets[cat]={limit:Number(hard[cat]),mode:'fixed',bucket:'other'};
+ }
+ return {
+  ...buckets,month,sourceCount:salaries.length,targets,
+  hardTotal:fixedSum,hardShortfall:Math.max(0,fixedSum-buckets.rozgor),
+  leisureShortfall:Math.max(0,(Number(hard['Dam olish'])||0)-buckets.oyin),
+  unallocatedHousehold:Math.max(0,available-distributed)
+ };
+}
+function effectiveCategoryLimit(w,month,category){
+ const hard=Number(w.budgets[month]?.[category]||0);
+ if(hard>0)return {limit:hard,mode:'fixed'};
+ const suggestion=salaryAllocation(w,month)?.targets[category];
+ return suggestion?{limit:suggestion.limit,mode:'auto'}:{limit:0,mode:'none'};
+}
 function addTransaction(w,{kind,amount:val,date=today(),category,note=''}) {
  if(!['income','expense'].includes(kind))throw Error('Operatsiya turi noto‘g‘ri');
  if(!validDay(date))throw Error('Sana noto‘g‘ri');
@@ -153,11 +224,14 @@ function addTransaction(w,{kind,amount:val,date=today(),category,note=''}) {
  const tx={id:id(),kind,amount:sum,date,category:name,note:cleanText(note)};
  const previous=spent(w,date.slice(0,7),name);
  w.transactions.push(tx);
- const budget=kind==='expense'?(w.budgets[date.slice(0,7)]||{})[name]:undefined;
+ const budgetInfo=kind==='expense'?effectiveCategoryLimit(w,date.slice(0,7),name):{limit:0,mode:'none'};
+ const budget=budgetInfo.limit;
  let alert='';
- if(budget>0){
+ if(budgetInfo.mode==='auto'&&budget===0)alert='⛔ '+name+' uchun avtomatik reja mablag‘i qolmagan.';
+ else if(budget>0){
   const next=previous+sum;
-  if(previous<budget&&next>=budget)alert='⛔ '+name+' limiti tugadi yoki oshib ketdi.';
+  if(next>budget&&previous>=budget)alert='⛔ '+name+' limiti avvaldan oshgan.';
+  else if(previous<budget&&next>=budget)alert='⛔ '+name+' limiti tugadi yoki oshib ketdi.';
   else if(previous<budget*.8&&next>=budget*.8)alert='⚠️ '+name+' limiti 80% ga yetdi.';
  }
  return {tx,alert};
@@ -181,7 +255,7 @@ function summary(w,month){
  const items=w.transactions.filter(t=>t.date.startsWith(month));
  const income=items.filter(t=>t.kind==='income').reduce((a,t)=>a+t.amount,0);
  const expense=items.filter(t=>t.kind==='expense').reduce((a,t)=>a+t.amount,0);
- const budgets=w.categories.expense.map(category=>({category,spent:spent(w,month,category),limit:w.budgets[month]?.[category]||0}));
+ const budgets=w.categories.expense.map(category=>({category,spent:spent(w,month,category),...effectiveCategoryLimit(w,month,category)}));
  return {income,expense,net:income-expense,budgets,transactions:items.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id))};
 }
 function validate(raw){
@@ -231,5 +305,5 @@ function validate(raw){
  return result;
 }
 function csv(w){const quote=v=>{let s=String(v??'');if(/^[\s]*[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};return '\ufeff'+[['Sana','Hisob','Turi','Kategoriya','Summa','Izoh'],...w.transactions.map(t=>[t.date,w.name,t.kind==='income'?'Daromad':'Xarajat',t.category,t.amount,t.note])].map(r=>r.map(quote).join(';')).join('\r\n');}
-return {KINDS,BASE,KEYWORD_RULES,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,validate,csv,spent};
+return {KINDS,BASE,SALARY_RATES,HOUSEHOLD_WEIGHTS,SALARY_BUCKETS,splitSalary,salaryAllocation,effectiveCategoryLimit,KEYWORD_RULES,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,validate,csv,spent};
 });
