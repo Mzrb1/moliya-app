@@ -181,12 +181,20 @@ function salaryAllocation(w,month){
  const available=Math.max(0,buckets.rozgor-fixedSum);
  const flexible=group.filter(cat=>!fixed.includes(cat));
  const weightTotal=flexible.reduce((sum,cat)=>sum+HOUSEHOLD_WEIGHTS[cat],0);
+ // Largest-remainder usuli: kichik summalarda ham limitlar musbat va jami aniq.
+ const shares=flexible.map((cat,i)=>{
+  const exact=weightTotal?available*HOUSEHOLD_WEIGHTS[cat]/weightTotal:0;
+  return {cat,i,value:Math.floor(exact),fraction:exact-Math.floor(exact)};
+ });
+ let pieces=available-shares.reduce((sum,x)=>sum+x.value,0);
+ for(const x of [...shares].sort((a,b)=>b.fraction-a.fraction||a.i-b.i)){
+  if(pieces<=0)break;
+  x.value++;pieces--;
+ }
  let distributed=0;
- for(let i=0;i<flexible.length;i++){
-  const cat=flexible[i];
-  const value=weightTotal===0?0:(i===flexible.length-1?available-distributed:Math.round(available*HOUSEHOLD_WEIGHTS[cat]/weightTotal));
-  distributed+=value;
-  targets[cat]={limit:value,mode:'auto',bucket:'rozgor'};
+ for(const x of shares){
+  distributed+=x.value;
+  targets[x.cat]={limit:x.value,mode:'auto',bucket:'rozgor'};
  }
  for(const cat of fixed)targets[cat]={limit:Number(hard[cat]),mode:'fixed',bucket:'rozgor'};
  if(w.categories.expense.includes('Dam olish')){
@@ -216,11 +224,14 @@ function addTransaction(w,{kind,amount:val,date=today(),category,note=''}) {
  const tx={id:id(),kind,amount:sum,date,category:name,note:cleanText(note)};
  const previous=spent(w,date.slice(0,7),name);
  w.transactions.push(tx);
- const budget=kind==='expense'?effectiveCategoryLimit(w,date.slice(0,7),name).limit:undefined;
+ const budgetInfo=kind==='expense'?effectiveCategoryLimit(w,date.slice(0,7),name):{limit:0,mode:'none'};
+ const budget=budgetInfo.limit;
  let alert='';
- if(budget>0){
+ if(budgetInfo.mode==='auto'&&budget===0)alert='⛔ '+name+' uchun avtomatik reja mablag‘i qolmagan.';
+ else if(budget>0){
   const next=previous+sum;
-  if(previous<budget&&next>=budget)alert='⛔ '+name+' limiti tugadi yoki oshib ketdi.';
+  if(next>budget&&previous>=budget)alert='⛔ '+name+' limiti avvaldan oshgan.';
+  else if(previous<budget&&next>=budget)alert='⛔ '+name+' limiti tugadi yoki oshib ketdi.';
   else if(previous<budget*.8&&next>=budget*.8)alert='⚠️ '+name+' limiti 80% ga yetdi.';
  }
  return {tx,alert};
