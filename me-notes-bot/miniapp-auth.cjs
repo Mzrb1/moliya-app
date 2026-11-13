@@ -13,7 +13,9 @@ function validateInitData(raw,botToken,{now=Math.floor(Date.now()/1000),maxAge=8
  const hash=params.get('hash'),authDate=Number(params.get('auth_date'));
  if(!hash||!/^[a-f0-9]{64}$/i.test(hash))throw Error('Telegram imzosi mavjud emas');
  if(!Number.isSafeInteger(authDate)||authDate<=0||authDate>now+120||now-authDate>maxAge)throw Error('Telegram sessiyasi muddati tugagan');
- const check=[...params].filter(([k])=>k!=='hash'&&k!=='signature')
+ // Bot-token HMAC must include every parameter EXCEPT hash. The modern
+ // Telegram 'signature' field is excluded only for third-party Ed25519 verification.
+ const check=[...params].filter(([k])=>k!=='hash')
   .map(([k,v])=>k+'='+v).sort().join('\n');
  const secret=createHmac('sha256','WebAppData').update(botToken).digest();
  const signed=createHmac('sha256',secret).update(check).digest('hex');
