@@ -30,3 +30,13 @@ Formulalar:
 - Eski 1-dars JSON zaxirasini tiklash 2-dars ma'lumotini o'chirmaydi.
 - Tozalash faqat foydalanuvchi ikki marta aniq tasdiqlagandan keyin.
 - Xavfsizlik kalitlari, bot tokenlari va shaxsiy ma'lumotlarni GitHubga joylamang.
+
+
+## Alohida «Moliya boshqaruvi» — ExpenseBot + BudgetBot
+- Bu sahifa dars moduli EMAS; 1–2-dars formullari, savollari va mashqlarini o‘zgartirmaydi.
+- Sahifa `finance.html` dan ochiladi va yangi `me_notes_finance_v1` localStorage kalitida saqlanadi.
+- Shaxsiy, oilaviy va biznes hisoblarining kategoriyalari, limiti, tranzaksiyalari va hisobotlari o‘zaro ajratilgan.
+- Shaxsiy kundalik tranzaksiyalari bu modulga avtomatik ko‘chirilmaydi va ikki marta hisoblanmaydi.
+- Moliyaviy modul zaxirasi o‘zining Sozlamalar bo‘limidan alohida eksport va import qilinadi; eski 1–2-dars zaxira formati o‘zgarmaydi.
+- Sinov vaqtida yozuvlar faqat qurilmada saqlanadi; Telegram akkauntlari, boshqa telefonlar va oila a'zolari bilan sinxronlashmaydi. Bot chatida avtomatik yozish uchun alohida backend kerak.
+- Ushbu modul kelajakda server-side authentication va user/workspace permissions bilan kengaytirilishi kerak, localStorage hech qachon ko‘p foydalanuvchi xavfsizligi sifatida talqin qilinmaydi.
