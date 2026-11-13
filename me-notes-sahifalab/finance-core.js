@@ -53,7 +53,7 @@ function parseFast(raw){
  const factor=scale?/^mln|million/i.test(scale)?1000000:1000:1;
  const total=n*factor;
  // 25.5 so‘m emas, 25.5 ming = 25500 bo‘lishi mumkin.
- if(!Number.isSafeInteger(total))return null;
+ if(!Number.isSafeInteger(total)||total<1||total>MAX)return null;
  return {kind,amount:amount(total),note};
 }
 function categoryFor(w,kind,note){
