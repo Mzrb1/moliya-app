@@ -13,7 +13,7 @@ function updateId(opId,index){
  return 1000000000000+hash.readUIntBE(0,6);
 }
 function positiveAmount(x){return F.amount(x);}
-function prepareEntries(entries,kind){
+function prepareEntries(entries,kind,categories=F.BASE[kind]){
  if(!Array.isArray(entries)||!entries.length||entries.length>MAX_LIST)throw Error('Bir amalda 1–20 ta yozuv bo‘lsin');
  return entries.map((x)=>{
   if(!x||!['expense','income'].includes(x.kind))throw Error('Yozuv turi noto‘g‘ri');
@@ -21,8 +21,8 @@ function prepareEntries(entries,kind){
   if(!F.validDay(date))throw Error('Yozuv sanasi noto‘g‘ri');
   const note=String(x.note||'').trim().slice(0,160);
   if(!note)throw Error('Izoh majburiy');
-  const category=String(x.category||F.categoryFor({kind,categories:F.BASE[kind]},x.kind,note)).slice(0,80);
-  if(!F.BASE[kind][x.kind].includes(category))throw Error('Kategoriya noto‘g‘ri: '+category);
+  const category=String(x.category||F.categoryFor({kind,categories},x.kind,note)).slice(0,80);
+  if(!categories[x.kind].includes(category))throw Error('Kategoriya noto‘g‘ri: '+category);
   return {kind:x.kind,amount:positiveAmount(x.amount),date,category,note};
  });
 }
@@ -50,13 +50,29 @@ function makeFinanceApi({db,botToken,ensure}){
  async function init(){
   await db.batch([
   'CREATE TABLE IF NOT EXISTS mn_api_ops (id TEXT PRIMARY KEY,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,kind TEXT NOT NULL,created TEXT NOT NULL)',
-  'CREATE TABLE IF NOT EXISTS mn_import_rows (uid TEXT NOT NULL,source_workspace TEXT NOT NULL,source_txid TEXT NOT NULL,workspace_id TEXT NOT NULL,transaction_id TEXT NOT NULL,PRIMARY KEY(uid,source_workspace,source_txid))'
+  'CREATE TABLE IF NOT EXISTS mn_import_rows (uid TEXT NOT NULL,source_workspace TEXT NOT NULL,source_txid TEXT NOT NULL,workspace_id TEXT NOT NULL,transaction_id TEXT NOT NULL,PRIMARY KEY(uid,source_workspace,source_txid))',
+  'CREATE TABLE IF NOT EXISTS mn_extra_categories (workspace_id TEXT NOT NULL,kind TEXT NOT NULL,name TEXT NOT NULL,PRIMARY KEY(workspace_id,kind,name))',
+  'CREATE TABLE IF NOT EXISTS mn_keyword_aliases (workspace_id TEXT NOT NULL,kind TEXT NOT NULL,category TEXT NOT NULL,word TEXT NOT NULL,PRIMARY KEY(workspace_id,kind,word))'
  ],'write');
  }
  async function owned(uid,wid){
   const r=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? AND id=?',args:[uid,wid]});
   if(!r.rows.length)throw forbidden('Bu hisobga kirishga ruxsat yo‘q');
   return r.rows[0];
+ }
+ async function preferences(w){
+  const cats=JSON.parse(JSON.stringify(F.BASE[w.kind]));
+  const keywords={income:{},expense:{}};
+  const [extra,alias]=await Promise.all([
+   db.execute({sql:'SELECT kind,name FROM mn_extra_categories WHERE workspace_id=? ORDER BY rowid',args:[w.id]}),
+   db.execute({sql:'SELECT kind,category,word FROM mn_keyword_aliases WHERE workspace_id=? ORDER BY rowid',args:[w.id]})
+  ]);
+  for(const r of extra.rows)if(cats[r.kind]&&!cats[r.kind].includes(String(r.name)))cats[r.kind].push(String(r.name));
+  for(const r of alias.rows){
+   if(!keywords[r.kind]||!cats[r.kind]?.includes(String(r.category)))continue;
+   (keywords[r.kind][r.category]??=[]).push(String(r.word));
+  }
+  return {categories:cats,keywords};
  }
  async function workspaces(uid){
   const [ws,user]=await Promise.all([
@@ -75,25 +91,28 @@ function makeFinanceApi({db,botToken,ensure}){
   ]);
   const transactions=rows.rows.map(r=>({id:String(r.id),kind:r.kind,category:String(r.category),amount:Number(r.amount),note:String(r.note||''),date:String(r.day)}));
   const budgets=Object.fromEntries(bs.rows.map(r=>[String(r.category),Number(r.limit_amount)]));
-  const shadow={kind:w.kind,categories:F.BASE[w.kind],budgets:{[month]:budgets},transactions};
+  const prefs=await preferences(w);
+  const shadow={kind:w.kind,categories:prefs.categories,keywords:prefs.keywords,budgets:{[month]:budgets},transactions};
   const summary=F.summary(shadow,month);
   const plan=F.salaryAllocation(shadow,month);
   return {workspace:{id:w.id,kind:w.kind,name:w.name},month,transactions,more:transactions.length===1500,
-    totals:{income:summary.income,expense:summary.expense,net:summary.net},categories:summary.budgets,budgets,plan};
+    totals:{income:summary.income,expense:summary.expense,net:summary.net},categories:summary.budgets,category_options:prefs.categories,keywords:prefs.keywords,budgets,plan};
  }
  async function execute(uid,body){
   const opId=body?.op_id,wid=body?.workspace_id,action=body?.action;
   if(!validId(opId)||typeof wid!=='string'||wid.length>128)throw Error('Amal ID yoki hisob noto‘g‘ri');
-  if(!['add','add_many','budget','delete','switch','new_workspace','import'].includes(action))throw Error('Amal turi noto‘g‘ri');
+  if(!['add','add_many','budget','delete','edit','switch','new_workspace','import','category_add','category_delete','keyword_add','keyword_delete'].includes(action))throw Error('Amal turi noto‘g‘ri');
   const previous=await db.execute({sql:'SELECT uid FROM mn_api_ops WHERE id=?',args:[opId]});
   if(previous.rows.length){
    if(previous.rows[0].uid!==uid)throw forbidden('Amal boshqa foydalanuvchiga tegishli');
    return {already:true};
   }
   const w=await owned(uid,wid),now=new Date().toISOString(),steps=[];
+  const prefs=await preferences(w);
+  const temp={kind:w.kind,categories:prefs.categories,keywords:prefs.keywords};
   let result={};
   if(action==='add'||action==='add_many'){
-   const entries=prepareEntries(action==='add'?[body.entry]:body.entries,w.kind);
+   const entries=prepareEntries(action==='add'?[body.entry]:body.entries,w.kind,prefs.categories);
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
    for(let i=0;i<entries.length;i++){
     const x=entries[i];
@@ -111,10 +130,10 @@ function makeFinanceApi({db,botToken,ensure}){
     ids.add(x.source_id);
     const note=String(x.note||'').trim();
     const originalCategory=String(x.category||'').slice(0,80);
-    const category=F.BASE[w.kind][x.kind]?.includes(originalCategory)?originalCategory:'Boshqa';
+    const category=prefs.categories[x.kind]?.includes(originalCategory)?originalCategory:'Boshqa';
     const transformed={kind:x.kind,date:x.date,amount:x.amount,category,
       note:category!==originalCategory?('['+originalCategory+'] '+note).slice(0,160):(note||originalCategory)};
-    return {...prepareEntries([transformed],w.kind)[0],source_id:x.source_id};
+    return {...prepareEntries([transformed],w.kind,prefs.categories)[0],source_id:x.source_id};
    });
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
    for(const x of entries){
@@ -126,7 +145,7 @@ function makeFinanceApi({db,botToken,ensure}){
    }
    result={attempted:entries.length};
   }else if(action==='budget'){
-   if(!F.BASE[w.kind].expense.includes(body.category))throw Error('Kategoriya noto‘g‘ri');
+   if(!prefs.categories.expense.includes(body.category))throw Error('Kategoriya noto‘g‘ri');
    if(!validMonth(body.month))throw Error('Oy noto‘g‘ri');
    const limit=Number(body.limit);
    if(!Number.isSafeInteger(limit)||limit<0||limit>1000000000000)throw Error('Limit noto‘g‘ri');
@@ -137,6 +156,46 @@ function makeFinanceApi({db,botToken,ensure}){
    if(typeof body.transaction_id!=='string'||body.transaction_id.length>96)throw Error('Yozuv ID noto‘g‘ri');
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
    steps.push({sql:'DELETE FROM mn_transactions WHERE uid=? AND workspace_id=? AND id=?',args:[uid,wid,body.transaction_id]});
+  }else if(action==='edit'){
+   if(typeof body.transaction_id!=='string'||body.transaction_id.length>96)throw Error('Yozuv ID noto‘g‘ri');
+   const prev=await db.execute({sql:'SELECT id,kind,category,amount,note,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND id=?',args:[uid,wid,body.transaction_id]});
+   if(!prev.rows.length)throw Error('Yozuv topilmadi');
+   const old=prev.rows[0];
+   const entry=prepareEntries([{kind:body.entry?.kind??old.kind,amount:body.entry?.amount??Number(old.amount),
+    category:body.entry?.category??old.category,note:body.entry?.note??old.note,date:body.entry?.date??old.day}],w.kind,prefs.categories)[0];
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   steps.push({sql:'UPDATE mn_transactions SET kind=?,category=?,amount=?,note=?,day=? WHERE id=? AND uid=? AND workspace_id=?',
+    args:[entry.kind,entry.category,entry.amount,entry.note,entry.date,body.transaction_id,uid,wid]});
+   result={updated:1};
+  }else if(action==='category_add'){
+   const kind=body.kind,name=String(body.name||'').trim();
+   F.addCategory(temp,kind,name);
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   steps.push({sql:'INSERT INTO mn_extra_categories(workspace_id,kind,name) VALUES(?,?,?)',args:[wid,kind,name]});
+   result={category:name};
+  }else if(action==='category_delete'){
+   const kind=body.kind,name=body.name;
+   if(!['income','expense'].includes(kind)||typeof name!=='string'||F.BASE[w.kind][kind].includes(name)||!prefs.categories[kind].includes(name))throw Error('Faqat qo‘shimcha kategoriyani o‘chirish mumkin');
+   const [used,limits]=await Promise.all([
+    db.execute({sql:'SELECT COUNT(*) AS n FROM mn_transactions WHERE workspace_id=? AND uid=? AND kind=? AND category=?',args:[wid,uid,kind,name]}),
+    db.execute({sql:'SELECT COUNT(*) AS n FROM mn_budgets WHERE workspace_id=? AND category=?',args:[wid,name]})
+   ]);
+   if(Number(used.rows[0].n)||Number(limits.rows[0].n))throw Error('Avval ushbu kategoriya yozuvlari yoki limitlarini boshqa kategoriyaga o‘tkazing');
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   steps.push({sql:'DELETE FROM mn_keyword_aliases WHERE workspace_id=? AND kind=? AND category=?',args:[wid,kind,name]});
+   steps.push({sql:'DELETE FROM mn_extra_categories WHERE workspace_id=? AND kind=? AND name=?',args:[wid,kind,name]});
+  }else if(action==='keyword_add'||action==='keyword_delete'){
+   const kind=body.kind,category=body.category,word=String(body.word||'');
+   if(action==='keyword_add'){
+    const normalized=F.addKeyword(temp,kind,category,word);
+    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+    steps.push({sql:'INSERT INTO mn_keyword_aliases(workspace_id,kind,category,word) VALUES(?,?,?,?)',args:[wid,kind,category,normalized]});
+   }else{
+    F.removeKeyword(temp,kind,category,word);
+    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+    steps.push({sql:'DELETE FROM mn_keyword_aliases WHERE workspace_id=? AND kind=? AND category=? AND word=?',
+     args:[wid,kind,category,F.normalizeKeyword(word)]});
+   }
   }else if(action==='switch'){
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
    steps.push({sql:'UPDATE mn_users SET active=? WHERE uid=?',args:[wid,uid]});
@@ -185,6 +244,6 @@ function makeFinanceApi({db,botToken,ensure}){
    json(res,404,{ok:false,error:'API topilmadi'},headers);return true;
   }catch(e){respondError(res,e,headers);return true;}
  }
- return {init,handle,ledger,execute};
+ return {init,handle,ledger,execute,preferences};
 }
 module.exports={makeFinanceApi,prepareEntries,updateId,ORIGIN};
