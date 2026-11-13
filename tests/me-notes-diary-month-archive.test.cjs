@@ -59,3 +59,22 @@ test('Diary and finance remain two independent entry points',()=>{
  assert.ok(f.includes('id="view-budget"'));
  assert.ok(f.includes('id="month"'));
 });
+
+
+test('Mini App pins asynchronous ledger responses to their request month',()=>{
+ const fs=require('node:fs');
+ const src=fs.readFileSync('me-notes-sahifalab/finance-unified.js','utf8');
+ const start=src.indexOf('async function fetchLedger()');
+ const end=src.indexOf('async function fetchMonthHistory()',start);
+ const block=src.slice(start,end);
+ assert.ok(block.includes('const wid=state.active,month=state.month;'));
+ assert.ok(block.includes("state.base[wid+'|'+month]"));
+ assert.ok(!block.includes('state.base[key()]'));
+ assert.ok(block.includes("data.month!==month"));
+});
+test('Diary archival cannot mutate the current calendar month in memory',()=>{
+ const orig=source();
+ assert.throws(()=>A.archive(orig,'2026-11','2026-11'));
+ assert.equal(orig.transactions.length,2);
+ assert.equal(Object.keys(orig.archivedMonths).length,0);
+});
