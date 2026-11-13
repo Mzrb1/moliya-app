@@ -52,5 +52,17 @@ function monthBackup(state,month){
   note:'Bu oylik ma’lumot nusxasi. To‘liq Sahifalab darslari va kundalikni tiklash uchun Zaxira -> Barcha ma’lumotlar JSON faylidan foydalaning.'
  };
 }
-return {monthOK,monthItems,totals,archive,restore,monthBackup};
+function validateFullBackup(source){
+ if(source?.format==='me-notes-diary-month-v1'||source?.format==='me-notes-finance-month-v1'){
+  throw Error('Bu bir oylik ma’lumot nusxasi, to‘liq kundalik zaxirasi emas. Darslar va kundalikni tiklash uchun Zaxira → Barcha ma’lumotlar (.json) faylini tanlang.');
+ }
+ if(!source||typeof source!=='object'||Array.isArray(source)||source.version!==1||!Array.isArray(source.transactions)||
+    !source.assets||typeof source.assets!=='object'||!source.debts||typeof source.debts!=='object'||
+    !source.estimated||typeof source.estimated!=='object'||!source.reflections||typeof source.reflections!=='object'||
+    !source.goal||typeof source.goal!=='object'||!source.promise||typeof source.promise!=='object'){
+  throw Error('To‘liq Sahifalab kundalik JSON zaxirasi topilmadi. Hozirgi yozuvlar o‘zgartirilmadi.');
+ }
+ return true;
+}
+return {monthOK,monthItems,totals,archive,restore,monthBackup,validateFullBackup};
 });
