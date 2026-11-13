@@ -48,7 +48,10 @@ function forbidden(message,status=403){const e=new Error(message);e.status=statu
 function makeFinanceApi({db,botToken,ensure}){
  const sendCors={'access-control-allow-origin':ORIGIN,'vary':'Origin','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'Content-Type,X-Telegram-Init-Data','access-control-max-age':'600'};
  async function init(){
-  await db.execute('CREATE TABLE IF NOT EXISTS mn_api_ops (id TEXT PRIMARY KEY,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,kind TEXT NOT NULL,created TEXT NOT NULL)');
+  await db.batch([
+  'CREATE TABLE IF NOT EXISTS mn_api_ops (id TEXT PRIMARY KEY,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,kind TEXT NOT NULL,created TEXT NOT NULL)',
+  'CREATE TABLE IF NOT EXISTS mn_import_rows (uid TEXT NOT NULL,source_workspace TEXT NOT NULL,source_txid TEXT NOT NULL,workspace_id TEXT NOT NULL,transaction_id TEXT NOT NULL,PRIMARY KEY(uid,source_workspace,source_txid))'
+ ],'write');
  }
  async function owned(uid,wid){
   const r=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? AND id=?',args:[uid,wid]});
@@ -81,7 +84,7 @@ function makeFinanceApi({db,botToken,ensure}){
  async function execute(uid,body){
   const opId=body?.op_id,wid=body?.workspace_id,action=body?.action;
   if(!validId(opId)||typeof wid!=='string'||wid.length>128)throw Error('Amal ID yoki hisob noto‘g‘ri');
-  if(!['add','add_many','budget','delete','switch','new_workspace'].includes(action))throw Error('Amal turi noto‘g‘ri');
+  if(!['add','add_many','budget','delete','switch','new_workspace','import'].includes(action))throw Error('Amal turi noto‘g‘ri');
   const previous=await db.execute({sql:'SELECT uid FROM mn_api_ops WHERE id=?',args:[opId]});
   if(previous.rows.length){
    if(previous.rows[0].uid!==uid)throw forbidden('Amal boshqa foydalanuvchiga tegishli');
@@ -98,6 +101,30 @@ function makeFinanceApi({db,botToken,ensure}){
       args:[randomUUID(),uid,wid,updateId(opId,i),x.kind,x.category,x.amount,x.note,x.date,now]});
    }
    result={saved:entries.length};
+  }else if(action==='import'){
+   const source=body.source_workspace;
+   if(typeof source!=='string'||!/^[a-zA-Z0-9:_-]{1,100}$/.test(source))throw Error('Eski hisob manbasi noto‘g‘ri');
+   if(body.source_kind!==w.kind)throw Error('Eski va yangi hisob turlari bir xil bo‘lishi shart');
+   if(!Array.isArray(body.entries)||!body.entries.length||body.entries.length>20)throw Error('Bir paketda 1–20 ta yozuv');
+   const ids=new Set(),entries=body.entries.map(x=>{
+    if(!x||typeof x.source_id!=='string'||!/^[a-zA-Z0-9:_-]{1,100}$/.test(x.source_id)||ids.has(x.source_id))throw Error('Eski yozuv ID noto‘g‘ri');
+    ids.add(x.source_id);
+    const note=String(x.note||'').trim();
+    const originalCategory=String(x.category||'').slice(0,80);
+    const category=F.BASE[w.kind][x.kind]?.includes(originalCategory)?originalCategory:'Boshqa';
+    const transformed={kind:x.kind,date:x.date,amount:x.amount,category,
+      note:category!==originalCategory?('['+originalCategory+'] '+note).slice(0,160):(note||originalCategory)};
+    return {...prepareEntries([transformed],w.kind)[0],source_id:x.source_id};
+   });
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   for(const x of entries){
+    const transactionId=randomUUID();
+    steps.push({sql:'INSERT INTO mn_transactions(id,uid,workspace_id,update_id,kind,category,amount,note,day,created) SELECT ?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM mn_import_rows WHERE uid=? AND source_workspace=? AND source_txid=?)',
+      args:[transactionId,uid,wid,updateId('import:'+uid+':'+source+':'+x.source_id,0),x.kind,x.category,x.amount,x.note,x.date,now,uid,source,x.source_id]});
+    steps.push({sql:'INSERT OR IGNORE INTO mn_import_rows(uid,source_workspace,source_txid,workspace_id,transaction_id) VALUES(?,?,?,?,?)',
+     args:[uid,source,x.source_id,wid,transactionId]});
+   }
+   result={attempted:entries.length};
   }else if(action==='budget'){
    if(!F.BASE[w.kind].expense.includes(body.category))throw Error('Kategoriya noto‘g‘ri');
    if(!validMonth(body.month))throw Error('Oy noto‘g‘ri');
@@ -108,8 +135,6 @@ function makeFinanceApi({db,botToken,ensure}){
    else steps.push({sql:'INSERT INTO mn_budgets(workspace_id,month,category,limit_amount) VALUES(?,?,?,?) ON CONFLICT(workspace_id,month,category) DO UPDATE SET limit_amount=excluded.limit_amount',args:[wid,body.month,body.category,limit]});
   }else if(action==='delete'){
    if(typeof body.transaction_id!=='string'||body.transaction_id.length>96)throw Error('Yozuv ID noto‘g‘ri');
-   const row=await db.execute({sql:'SELECT id FROM mn_transactions WHERE uid=? AND workspace_id=? AND id=?',args:[uid,wid,body.transaction_id]});
-   if(!row.rows.length)throw Error('O‘chiriladigan yozuv topilmadi');
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
    steps.push({sql:'DELETE FROM mn_transactions WHERE uid=? AND workspace_id=? AND id=?',args:[uid,wid,body.transaction_id]});
   }else if(action==='switch'){
