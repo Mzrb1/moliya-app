@@ -23,7 +23,7 @@
 </nav>
 <section id="home" class="panel active" aria-label="Bosh sahifa">
 <div class="card tint"><div class="sectionhead"><div><div class="micro">Bugungi sana</div><h2 id="date-title" style="margin:3px 0 0">—</h2></div><span class="pill">Har kuni 1 daqiqa</span></div><p class="hint">Pul kirsa yoki chiqsa yozib boring. Hisoblar o‘zi yangilanadi.</p><div class="actions"><button class="btn" type="button" id="quick-expense">− Xarajat yozish</button><button class="btn secondary" type="button" id="quick-income">+ Daromad yozish</button></div></div>
-<div class="card"><div class="sectionhead"><h2>Oxirgi 30 kun</h2><span class="badge-type">Kundalik yozuvlardan</span></div><div class="metrics"><div class="metric"><div class="label">Daromad</div><div class="value positive" id="home-income">0</div><div class="unit">so‘m</div></div><div class="metric"><div class="label">Xarajat</div><div class="value negative" id="home-expense">0</div><div class="unit">so‘m</div></div><div class="metric"><div class="label">Qoldiq</div><div class="value" id="home-net">0</div><div class="unit">so‘m</div></div></div><div class="hint">Bu raqamlar faqat kiritgan kunlik operatsiyalaringiz asosida hisoblanadi.</div></div>
+<div class="card"><div class="sectionhead"><h2>Joriy oy</h2><span class="badge-type">Kundalik yozuvlardan</span></div><div class="metrics"><div class="metric"><div class="label">Daromad</div><div class="value positive" id="home-income">0</div><div class="unit">so‘m</div></div><div class="metric"><div class="label">Xarajat</div><div class="value negative" id="home-expense">0</div><div class="unit">so‘m</div></div><div class="metric"><div class="label">Qoldiq</div><div class="value" id="home-net">0</div><div class="unit">so‘m</div></div></div><div class="hint">Bu raqamlar faqat kiritgan kunlik operatsiyalaringiz asosida hisoblanadi.</div></div>
 <div class="card"><div class="sectionhead"><h2>Sof boyligim</h2><button type="button" class="btn small outline" data-goto="snapshot">To‘ldirish</button></div><div id="home-worth" class="bigvalue">0 so‘m</div><div class="micro" id="worth-caption">Aktivlar − qarzlar</div></div>
 <div class="card"><div class="sectionhead"><h2>60 kunlik maqsadim</h2><button type="button" class="btn small outline" data-goto="lesson">Tahrirlash</button></div><p class="goal-note" id="home-goal">Hali maqsad yozilmagan.</p><div id="goal-progress-wrap" class="hide"><div class="progress"><div id="goal-progress"></div></div><p class="micro" id="goal-progress-text"></p></div></div>
 </section>
@@ -59,12 +59,21 @@
 </section>
 <section id="backup" class="panel" aria-label="Zaxira va sozlamalar">
 <div class="card"><h2>💾 Ma’lumotlarimni saqlash</h2><p class="hint">Darslar va shaxsiy kundalik ma’lumotlari shu qurilmadagi brauzer xotirasida saqlanadi, serverga avtomatik yuborilmaydi. Ilovani internet orqali ochish talab qilinishi mumkin. Brauzer xotirasi o‘chirilsa, yozuvlar yo‘qolishi mumkin. JSON zaxira ikkala dars ma’lumotlarini ham qamrab oladi.</p><div class="actions"><button type="button" class="btn" id="export-json">⬇ Zaxira olish (.json)</button><button type="button" class="btn secondary" id="export-csv">⬇ Yozuvlar (.csv)</button></div><div class="divider"></div><div class="field"><label for="import-file">Oldingi zaxiradan tiklash (.json)</label><input type="file" id="import-file" accept=".json,application/json"></div><p class="micro">Tiklash zaxiradagi ma’lumot bilan tegishli darslarni va kundalikni almashtiradi. Eski 1-dars zaxirasi 2-darsni o‘zgartirmaydi. Faylni faqat o‘zingiz olgan bo‘lsangiz yuklang.</p><div class="divider"></div><details><summary>Zaxira matnini ko‘rish (yuklab olish ishlamasa)</summary><div class="inside"><p class="micro" style="margin-bottom:8px">Quyidagi matnni nusxalab, xavfsiz joyga saqlang. Tiklash uchun uni .json faylga aylantirish mumkin.</p><button class="btn small outline" type="button" id="show-json">Zaxira matnini chiqarish</button><textarea id="backup-text" style="width:100%;height:140px;margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:9px" readonly placeholder="Bu yerda zaxira matni chiqadi"></textarea><button class="btn small secondary" type="button" id="copy-json">Nusxalash</button></div></details></div>
+<div class="card" id="month-archive-card">
+<h2>🗃 Oylik arxiv</h2>
+<p class="hint">Tugagan oyning yozuvlarini alohida arxivga ko‘chirishingiz mumkin. Bu PDF darslari va maqsadlaringizga tegmaydi. Arxivlangan oy yozuvlari joriy hisobotga qo‘shilmaydi; istalgan payt qayta tiklash mumkin. Avval to‘liq JSON zaxirasini oling.</p>
+<div class="field"><label for="archive-month">Qaysi oy?</label><input type="month" id="archive-month"/></div>
+<div class="actions"><button id="export-archive-month" type="button" class="btn secondary">Oylik JSON nusxa</button><button id="move-month-archive" type="button" class="btn">Oyni arxivga ko‘chirish</button></div>
+<div class="divider"></div><h3>Saqlangan oylar</h3><div id="archived-month-list"></div>
+<p class="micro">Arxiv ushbu qurilmada saqlanadi. Brauzer keshini tozalash yoki butun kundalikni o‘chirish arxivni ham yo‘qotishi mumkin. JSON zaxira faylini alohida saqlang.</p>
+</div>
 <div class="card"><h2>🔒 Maxfiylik</h2><p class="hint">Internet, akkaunt, server va obuna talab qilinmaydi. Yozuvlar bu ilovadan tashqariga avtomatik yuborilmaydi. Qurilmangizni ekran qulfi bilan himoyalang. Bank parollari yoki karta PIN-kodini bu yerga yozmang.</p><button type="button" class="btn danger" id="clear-data">Barcha yozuvlarni o‘chirish</button></div>
 <div id="storage-warning" class="alert hide" role="alert">Brauzer bu fayl uchun mahalliy saqlashga ruxsat bermadi. Yozuvlar oynani yopganda yo‘qolishi mumkin. Zaxira JSON faylini saqlang yoki boshqa brauzerda oching.</div>
 </section>
 <p class="bottom-note">1–2-dars ish daftarlari va alohida shaxsiy kundalik. Ma’lumotlar qurilmangizda saqlanadi.</p>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="diary-month-archive.js"></script>
 <script>
 (function(){
 'use strict';
@@ -81,13 +90,24 @@ const $=(id)=>document.getElementById(id);
 const format=(v)=>Math.round(Number(v)||0).toLocaleString('ru-RU').replace(/\u00a0/g,' ');
 const localToday=()=>{let x=new Date();return [x.getFullYear(),String(x.getMonth()+1).padStart(2,'0'),String(x.getDate()).padStart(2,'0')].join('-')};
 const dateShift=(date,offset)=>{let d=new Date(date+'T12:00:00');if(!Number.isFinite(d.getTime()))return date;d.setDate(d.getDate()+offset);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
-const initial=()=>({version:1,transactions:[],assets:{},debts:{},estimated:{income:{},fixed:{},variable:{}},snapshotDate:localToday(),reflections:{q1:'',q2:'',q3:''},goal:{text:'',start:localToday(),steps:'',done:false},promise:{days:[],time:'',deadline:''}});
+const initial=()=>({version:1,transactions:[],archivedMonths:{},assets:{},debts:{},estimated:{income:{},fixed:{},variable:{}},snapshotDate:localToday(),reflections:{q1:'',q2:'',q3:''},goal:{text:'',start:localToday(),steps:'',done:false},promise:{days:[],time:'',deadline:''}});
 function sanitizeData(x){const base=initial();if(!x||typeof x!=='object'||Array.isArray(x))throw Error('Noto‘g‘ri fayl');
  const takeMoney=(o)=>{let r={};if(o&&typeof o==='object'&&!Array.isArray(o)){for(let [k,v] of Object.entries(o)){if(typeof k==='string'&&k.length<150&&Number.isFinite(Number(v))&&Number(v)>=0)r[k]=Number(v)}}return r};
  const dateOK=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&Number.isFinite(new Date(s+'T12:00:00').getTime());
  let transactions=(Array.isArray(x.transactions)?x.transactions:[]).slice(0,50000).filter(t=>t&&typeof t==='object'&&['income','fixed','variable'].includes(t.kind)&&dateOK(t.date)&&typeof t.category==='string'&&t.category.length<=140&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0).map(t=>({id:String(t.id||'')||newId(),date:t.date,kind:t.kind,category:t.category,amount:Number(t.amount),note:String(t.note||'').slice(0,160)}));
  const goal=x.goal&&typeof x.goal==='object'?x.goal:{};const promise=x.promise&&typeof x.promise==='object'?x.promise:{};const reflections=x.reflections&&typeof x.reflections==='object'?x.reflections:{};
- return {...base,transactions,assets:takeMoney(x.assets),debts:takeMoney(x.debts),estimated:{income:takeMoney(x.estimated?.income),fixed:takeMoney(x.estimated?.fixed),variable:takeMoney(x.estimated?.variable)},snapshotDate:dateOK(x.snapshotDate)?x.snapshotDate:base.snapshotDate,reflections:{q1:String(reflections.q1||'').slice(0,3000),q2:String(reflections.q2||'').slice(0,3000),q3:String(reflections.q3||'').slice(0,3000)},goal:{text:String(goal.text||'').slice(0,3000),start:dateOK(goal.start)?goal.start:base.goal.start,steps:String(goal.steps||'').slice(0,240),done:goal.done===true},promise:{days:Array.isArray(promise.days)?promise.days.filter(n=>Number.isInteger(n)&&n>=0&&n<7):[],time:typeof promise.time==='string'?promise.time.slice(0,5):'',deadline:dateOK(promise.deadline)?promise.deadline:''}};
+ const archivedMonths={};
+ if(x.archivedMonths&&typeof x.archivedMonths==='object'&&!Array.isArray(x.archivedMonths)){
+  let totalArchived=0;
+  for(const [month,entry] of Object.entries(x.archivedMonths)){
+   if(!window.MEDiaryMonthArchive.monthOK(month)||!entry||!Array.isArray(entry.transactions))continue;
+   const records=entry.transactions.filter(t=>t&&typeof t==='object'&&['income','fixed','variable'].includes(t.kind)&&dateOK(t.date)&&t.date.startsWith(month)&&typeof t.category==='string'&&t.category.length<=140&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0).map(t=>({id:String(t.id||'')||newId(),date:t.date,kind:t.kind,category:t.category,amount:Number(t.amount),note:String(t.note||'').slice(0,160)}));
+   totalArchived+=records.length;
+   if(totalArchived>50000)throw Error('Arxiv juda katta (50 000 yozuvdan oshgan)');
+   if(records.length)archivedMonths[month]={archivedAt:String(entry.archivedAt||'').slice(0,35),transactions:records};
+  }
+ }
+ return {...base,transactions,archivedMonths,assets:takeMoney(x.assets),debts:takeMoney(x.debts),estimated:{income:takeMoney(x.estimated?.income),fixed:takeMoney(x.estimated?.fixed),variable:takeMoney(x.estimated?.variable)},snapshotDate:dateOK(x.snapshotDate)?x.snapshotDate:base.snapshotDate,reflections:{q1:String(reflections.q1||'').slice(0,3000),q2:String(reflections.q2||'').slice(0,3000),q3:String(reflections.q3||'').slice(0,3000)},goal:{text:String(goal.text||'').slice(0,3000),start:dateOK(goal.start)?goal.start:base.goal.start,steps:String(goal.steps||'').slice(0,240),done:goal.done===true},promise:{days:Array.isArray(promise.days)?promise.days.filter(n=>Number.isInteger(n)&&n>=0&&n<7):[],time:typeof promise.time==='string'?promise.time.slice(0,5):'',deadline:dateOK(promise.deadline)?promise.deadline:''}};
 }
 function newId(){return 'tx_'+Date.now()+'_'+Math.random().toString(36).slice(2,10)}
 let memoryOnly=false, data;
@@ -100,14 +120,14 @@ document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()
 document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.goto)));
 const total=(arr)=>arr.reduce((s,n)=>s+(Number(n.amount)||0),0);
 const dictTotal=o=>Object.values(o||{}).reduce((a,b)=>a+(Number(b)||0),0);
-function renderHome(){const now=localToday(),from=dateShift(now,-29);const tx=data.transactions.filter(t=>t.date>=from&&t.date<=now);const income=total(tx.filter(t=>t.kind==='income'));const expense=total(tx.filter(t=>t.kind!=='income'));$('date-title').textContent=new Date(now+'T12:00:00').toLocaleDateString('uz-UZ',{year:'numeric',month:'long',day:'numeric'});$('home-income').textContent=format(income);$('home-expense').textContent=format(expense);$('home-net').textContent=format(income-expense);$('home-net').className='value '+(income-expense<0?'negative':'positive');const a=dictTotal(data.assets),d=dictTotal(data.debts);$('home-worth').textContent=format(a-d)+' so‘m';$('home-worth').className='bigvalue '+(a-d<0?'negative':'positive');$('worth-caption').textContent='Aktivlar '+format(a)+' − qarzlar '+format(d)+' so‘m';$('home-goal').textContent=data.goal.text||'Hali maqsad yozilmagan.';$('goal-progress-wrap').classList.toggle('hide',!data.goal.text);if(data.goal.text){let passed=Math.max(0,Math.min(60,Math.round((new Date(now+'T12:00:00')-new Date(data.goal.start+'T12:00:00'))/86400000)));$('goal-progress').style.width=(data.goal.done?100:passed/60*100)+'%';$('goal-progress-text').textContent=data.goal.done?'✅ Maqsad bajarildi':(now<data.goal.start?'Boshlanish sanasi hali kelmagan.':(60-passed)+' kun qoldi • '+passed+' kun o‘tdi')}}
+function renderHome(){const now=localToday(),month=now.slice(0,7);const tx=data.transactions.filter(t=>t.date.startsWith(month)&&t.date<=now);const income=total(tx.filter(t=>t.kind==='income'));const expense=total(tx.filter(t=>t.kind!=='income'));$('date-title').textContent=new Date(now+'T12:00:00').toLocaleDateString('uz-UZ',{year:'numeric',month:'long',day:'numeric'});$('home-income').textContent=format(income);$('home-expense').textContent=format(expense);$('home-net').textContent=format(income-expense);$('home-net').className='value '+(income-expense<0?'negative':'positive');const a=dictTotal(data.assets),d=dictTotal(data.debts);$('home-worth').textContent=format(a-d)+' so‘m';$('home-worth').className='bigvalue '+(a-d<0?'negative':'positive');$('worth-caption').textContent='Aktivlar '+format(a)+' − qarzlar '+format(d)+' so‘m';$('home-goal').textContent=data.goal.text||'Hali maqsad yozilmagan.';$('goal-progress-wrap').classList.toggle('hide',!data.goal.text);if(data.goal.text){let passed=Math.max(0,Math.min(60,Math.round((new Date(now+'T12:00:00')-new Date(data.goal.start+'T12:00:00'))/86400000)));$('goal-progress').style.width=(data.goal.done?100:passed/60*100)+'%';$('goal-progress-text').textContent=data.goal.done?'✅ Maqsad bajarildi':(now<data.goal.start?'Boshlanish sanasi hali kelmagan.':(60-passed)+' kun qoldi • '+passed+' kun o‘tdi')}}
 $('quick-expense').addEventListener('click',()=>{clearEntryForm();$('tx-type').value='variable';updateCategories();switchTab('entries');$('tx-amount').focus()});$('quick-income').addEventListener('click',()=>{clearEntryForm();$('tx-type').value='income';updateCategories();switchTab('entries');$('tx-amount').focus()});
 let editingId=null;
 function updateCategories(selected){const type=$('tx-type').value;const list=defs[type];$('tx-category').replaceChildren(...list.map(name=>{let o=document.createElement('option');o.value=name;o.textContent=name;return o}));if(selected&&list.includes(selected))$('tx-category').value=selected}
 $('tx-type').addEventListener('change',()=>updateCategories());
 function clearEntryForm(){$('entry-form').reset();$('tx-date').value=localToday();$('tx-type').value='variable';updateCategories();editingId=null;$('entry-form-title').textContent='Yangi yozuv';$('save-entry').textContent='Saqlash';$('cancel-edit').classList.add('hide')}
 $('cancel-edit').addEventListener('click',clearEntryForm);
-$('entry-form').addEventListener('submit',e=>{e.preventDefault();const date=$('tx-date').value,kind=$('tx-type').value,category=$('tx-category').value,amount=Number($('tx-amount').value),note=$('tx-note').value.trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(amount)||amount<=0||!defs[kind]?.includes(category)){toast('Ma’lumotlarni tekshiring');return}if(editingId){const t=data.transactions.find(t=>t.id===editingId);if(t)Object.assign(t,{date,kind,category,amount,note})}else data.transactions.push({id:newId(),date,kind,category,amount,note});save();const m=date.slice(0,7);$('month-filter').value=m;clearEntryForm();renderEntries();renderHome();toast('Yozuv saqlandi ✓')});
+$('entry-form').addEventListener('submit',e=>{e.preventDefault();const date=$('tx-date').value,kind=$('tx-type').value,category=$('tx-category').value,amount=Number($('tx-amount').value),note=$('tx-note').value.trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(amount)||amount<=0||!defs[kind]?.includes(category)){toast('Ma’lumotlarni tekshiring');return}if(data.archivedMonths?.[date.slice(0,7)]){toast('Bu oy arxivlangan. Avval Zaxira → Oylik arxivdan tiklang.');return}if(editingId){const t=data.transactions.find(t=>t.id===editingId);if(t)Object.assign(t,{date,kind,category,amount,note})}else data.transactions.push({id:newId(),date,kind,category,amount,note});save();const m=date.slice(0,7);$('month-filter').value=m;clearEntryForm();renderEntries();renderHome();toast('Yozuv saqlandi ✓')});
 function renderEntries(){const month=$('month-filter').value||localToday().slice(0,7);const tx=data.transactions.filter(t=>t.date.slice(0,7)===month).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));const inc=total(tx.filter(t=>t.kind==='income'));const exp=total(tx.filter(t=>t.kind!=='income'));$('month-income').textContent=format(inc);$('month-expense').textContent=format(exp);$('month-balance').textContent=format(inc-exp);$('month-balance').className='value '+(inc-exp<0?'negative':'positive');const list=$('tx-list');list.replaceChildren();if(!tx.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='Bu oy uchun hali yozuv yo‘q.';list.append(empty);return}for(const t of tx){const box=document.createElement('div');box.className='tx';box.innerHTML='<div style="min-width:0;flex:1"><div class="tx-title">'+escapeText(t.category)+'</div><div class="tx-meta">'+escapeText(t.date)+(t.note?' · '+escapeText(t.note):'')+'</div></div><div style="flex-shrink:0"><div class="tx-sum '+(t.kind==='income'?'positive':'negative')+'">'+(t.kind==='income'?'+':'−')+format(t.amount)+'</div><div class="tx-buttons"><button type="button" class="btn small secondary" data-edit="'+escapeText(t.id)+'">Tahrir</button><button type="button" class="btn small danger" data-delete="'+escapeText(t.id)+'">O‘chirish</button></div></div>';list.append(box)}}
 $('month-filter').addEventListener('change',renderEntries);
 $('tx-list').addEventListener('click',e=>{const btn=e.target.closest('button');if(!btn)return;const id=btn.dataset.edit||btn.dataset.delete;const t=data.transactions.find(t=>t.id===id);if(!t)return;if('delete' in btn.dataset){if(confirm('Ushbu yozuvni o‘chirasizmi?')){data.transactions=data.transactions.filter(x=>x.id!==id);save();renderEntries();renderHome();toast('Yozuv o‘chirildi')}return}editingId=id;$('tx-date').value=t.date;$('tx-type').value=t.kind;updateCategories(t.category);$('tx-amount').value=t.amount;$('tx-note').value=t.note;$('entry-form-title').textContent='Yozuvni tahrirlash';$('save-entry').textContent='O‘zgarishni saqlash';$('cancel-edit').classList.remove('hide');$('entry-form').scrollIntoView({behavior:'smooth',block:'start'})});
@@ -124,13 +144,70 @@ for(const id of ['goal-text','goal-start','goal-steps','goal-done'])$(id).addEve
 const daysBox=$('days-box');for(let n=0;n<7;n++){const label=document.createElement('label');const check=document.createElement('input');check.type='checkbox';check.value=String(n);check.checked=data.promise.days.includes(n);check.addEventListener('change',()=>{data.promise.days=[...document.querySelectorAll('#days-box input:checked')].map(x=>Number(x.value));save()});const span=document.createElement('span');span.textContent=dayNames[n];label.append(check,span);daysBox.append(label)}
 $('lesson-time').value=data.promise.time;$('course-deadline').value=data.promise.deadline;$('lesson-time').addEventListener('change',e=>{data.promise.time=e.target.value;save()});$('course-deadline').addEventListener('change',e=>{data.promise.deadline=e.target.value;save()});
 function download(content,type,name){const b=new Blob([content],{type});const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
+const DiaryArchive=window.MEDiaryMonthArchive;
+function previousMonth(month){
+ const [year,m]=month.split('-').map(Number);
+ return (m===1?year-1:year)+'-'+String(m===1?12:m-1).padStart(2,'0');
+}
+function archivedUI(){
+ const host=$('archived-month-list');host.replaceChildren();
+ const months=Object.keys(data.archivedMonths||{}).sort().reverse();
+ if(!months.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='Hali arxivlangan oy yo‘q.';host.append(empty);return}
+ for(const month of months){
+  const archive=data.archivedMonths[month];
+  const box=document.createElement('div');box.className='tx';
+  const label=document.createElement('div');label.style.flex='1';
+  label.innerHTML='<strong>'+month+'</strong><div class="micro">'+archive.transactions.length+' ta yozuv</div>';
+  const btn=document.createElement('button');btn.type='button';btn.className='btn small secondary';btn.textContent='Tiklash';
+  btn.onclick=()=>{
+   if(!confirm(month+' oyi arxivdagi '+archive.transactions.length+' ta yozuvni qayta kundalikka o‘tkazasizmi?'))return;
+   try{
+    persistArchiveState(DiaryArchive.restore(data,month));
+    $('month-filter').value=month;renderEntries();renderHome();archivedUI();toast(month+' oyi tiklandi ✓');
+   }catch(e){alert('Tiklash bajarilmadi: '+e.message);}
+  };
+  box.append(label,btn);host.append(box);
+ }
+}
+function persistArchiveState(next){
+ if(memoryOnly)throw Error('Qurilmada saqlash ishlamayapti. Avval to‘liq JSON zaxira oling');
+ // The archive move is committed to localStorage before updating in-memory state.
+ // On quota/security failure, keep previous entries intact.
+ localStorage.setItem(STORE,JSON.stringify(next));
+ data=next;
+}
+$('archive-month').value=previousMonth(localToday().slice(0,7));
+$('export-archive-month').addEventListener('click',()=>{
+ try{
+  const month=$('archive-month').value;
+  const backup=DiaryArchive.monthBackup(data,month);
+  if(!backup.transactions.length){alert('Bu oyda yozuv topilmadi');return}
+  download(JSON.stringify(backup,null,2),'application/json;charset=utf-8','sahifalab_oylik_'+month+'.json');
+  toast(month+' oyining nusxasi olindi');
+ }catch(e){alert('Oylik zaxira olinmadi: '+e.message)}
+});
+$('move-month-archive').addEventListener('click',()=>{
+ try{
+  const month=$('archive-month').value,rows=DiaryArchive.monthItems(data.transactions,month);
+  if(!rows.length){alert('Bu oyda arxivlanadigan yozuv yo‘q');return}
+  const inc=total(rows.filter(t=>t.kind==='income')),exp=total(rows.filter(t=>t.kind!=='income'));
+  if(!confirm(month+' oyi '+rows.length+' ta yozuvni arxivga ko‘chirasizmi?\nKirim: '+format(inc)+' so‘m. Chiqim: '+format(exp)+' so‘m.\nDarslar va boshqa oylar saqlanadi.'))return;
+  if(!confirm('Avval Zaxira bo‘limida to‘liq JSON nusxa olganingizga ishonchingiz komilmi?'))return;
+  const next=DiaryArchive.archive(data,month,localToday().slice(0,7));
+  persistArchiveState(next);
+  if($('month-filter').value===month)renderEntries();
+  renderHome();archivedUI();toast(month+' oyi arxivlandi ✓');
+ }catch(e){alert('Arxivlash bajarilmadi: '+e.message)}
+});
+archivedUI();
+
 const backupAll=()=>({...data,lesson2:window.MENotesLesson2.export()});
 $('export-json').addEventListener('click',()=>{try{download(JSON.stringify(backupAll(),null,2),'application/json;charset=utf-8','moliyaviy_kundalik_zaxira_'+localToday()+'.json');toast('Zaxira yuklab olish boshlandi')}catch(e){alert('Zaxira olinmadi: 2-dars ma’lumotlarini tekshiring.')} });
 $('export-csv').addEventListener('click',()=>{const esc=x=>'"'+String(x??'').replace(/"/g,'""')+'"';const rows=[['Sana','Turi','Kategoriya','Summa (so‘m)','Izoh'],...data.transactions.map(t=>[t.date,t.kind==='income'?'Daromad':t.kind==='fixed'?'Doimiy xarajat':'O‘zgaruvchan xarajat',t.category,t.amount,t.note])];const csv='\ufeff'+rows.map(r=>r.map(esc).join(';')).join('\r\n');download(csv,'text/csv;charset=utf-8','kundalik_yozuvlar_'+localToday()+'.csv');toast('CSV tayyor')});
 $('import-file').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{if(file.size>8*1024*1024)throw Error('Fayl juda katta');const raw=await file.text();const parsed=JSON.parse(raw);const incoming=sanitizeData(parsed);const hasLesson2=Object.prototype.hasOwnProperty.call(parsed,'lesson2');const incoming2=hasLesson2?window.MENotesLesson2.validate(parsed.lesson2):null;if(!confirm('Zaxiradan tiklash mavjud yozuvlarni almashtiradi. Eski (1-dars) zaxirasi 2-darsni o‘zgartirmaydi. Davom etasizmi?'))return;if(hasLesson2&&!window.MENotesLesson2.restore(incoming2))throw Error('2-darsni tiklab bo‘lmadi');data=incoming;save();location.reload()}catch(error){alert('Zaxira faylini o‘qib bo‘lmadi. To‘g‘ri JSON faylini tanlang.')}finally{e.target.value=''}});
 $('show-json').addEventListener('click',()=>{$('backup-text').value=JSON.stringify(backupAll(),null,2);toast('Zaxira matni chiqarildi')});
 $('copy-json').addEventListener('click',async()=>{const area=$('backup-text');if(!area.value)area.value=JSON.stringify(backupAll(),null,2);area.select();try{if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(area.value);else if(!document.execCommand('copy'))throw Error();toast('Nusxalandi ✓')}catch(e){toast('Matnni belgilab, qo‘lda nusxalang')}});
-$('clear-data').addEventListener('click',()=>{if(!confirm('1-dars, 2-dars va shaxsiy kundalikdagi barcha yozuvlar o‘chiriladi. Davom etasizmi?'))return;if(!confirm('Rostdan ham hamma ma’lumotni o‘chirilsinmi? Avval zaxira olish tavsiya etiladi.'))return;if(!window.MENotesLesson2.reset()){alert('2-darsni tozalab bo‘lmadi.');return;}data=initial();save();location.reload()});
+$('clear-data').addEventListener('click',()=>{if(!confirm('1-dars, 2-dars, kundalik va barcha ARXIVLARDAGI yozuvlar ham o‘chiriladi! Avval JSON zaxira oling. Davom etasizmi?'))return;if(!confirm('Rostdan ham hamma ma’lumotni o‘chirilsinmi? Avval zaxira olish tavsiya etiladi.'))return;if(!window.MENotesLesson2.reset()){alert('2-darsni tozalab bo‘lmadi.');return;}data=initial();save();location.reload()});
 $('month-filter').value=localToday().slice(0,7);clearEntryForm();updateSnapshot();updateEstimates();updateGoal();renderEntries();renderHome();if(memoryOnly)$('storage-warning').classList.remove('hide');
 })();
 </script>
