@@ -25,6 +25,8 @@ jobs:
           node --check me-notes-bot/miniapp-api.cjs
           node --check me-notes-bot/server.cjs
           node --check me-notes-bot/request-route.cjs
+          node --check me-notes-bot/month-guard.cjs
+          node --check me-notes-sahifalab/diary-month-archive.js
           node --check me-notes-sahifalab/finance-unified.js
           node --check me-notes-sahifalab/finance-sw.js
       - name: API security and shared ledger tests
@@ -33,6 +35,8 @@ jobs:
         run: node --test tests/finance-core.test.cjs tests/me-notes-list.test.cjs
       - name: Sahifalab diary separation regression
         run: node --test tests/me-notes-diary-separation.test.cjs
+      - name: Month archive, restore and diary-isolation tests
+        run: node --test tests/me-notes-diary-month-archive.test.cjs
       - name: Unified UI link and fallback smoke
         run: |
           node -e "const fs=require('fs');const h=fs.readFileSync('me-notes-sahifalab/finance-unified.html','utf8');const js=fs.readFileSync('me-notes-sahifalab/finance-unified.js','utf8');for(const x of ['view-home','view-records','view-budget','view-settings','legacy-file','finance-unified.js'])if(!h.includes(x))throw Error('Missing '+x);for(const x of ['X-Telegram-Init-Data','function importLegacy','state.queue','function flush'])if(!js.includes(x))throw Error('Missing '+x);"
