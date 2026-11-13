@@ -7,6 +7,7 @@ const initData=String(tg?.initData||'');
 const cacheUid=String(tg?.initDataUnsafe?.user?.id||'');
 const CACHE_KEY='me_notes_unified_cache_'+cacheUid,QUEUE_KEY='me_notes_unified_queue_'+cacheUid;
 const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),views:'home',base:{},queue:[],online:false,storageOK:true,busy:false};
+let legacyBackup=null;
 function el(tag,cls,text){const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x;}
 function alertMessage(text,ok=false){
  const zone=$('notices');zone.replaceChildren();
@@ -240,6 +241,49 @@ function exportData(){
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
  const a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download='me_notes_yagona_'+state.month+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
 }
+function previewLegacy(raw){
+ legacyBackup=F.validate(raw);
+ const accounts=legacyBackup.workspaces;
+ if(!accounts.length)throw Error('Eski JSON zaxirada hisoblar yo‘q');
+ const selector=$('legacy-workspace');selector.replaceChildren();
+ for(const w of accounts){
+  const opt=el('option');opt.value=w.id;opt.textContent=w.name+' · '+F.KINDS[w.kind]+' · '+w.transactions.length+' yozuv';
+  selector.append(opt);
+ }
+ $('import-panel').classList.remove('hidden');
+ $('legacy-preview').textContent=accounts.length+' ta eski hisob topildi. Ko‘chirishdan oldin hisobni tanlang va yozuvlarni tekshiring.';
+}
+function importLegacy(){
+ try{
+  if(!legacyBackup)throw Error('Avval eski JSON zaxirani tanlang');
+  const original=legacyBackup.workspaces.find(w=>w.id===$('legacy-workspace').value);
+  const dest=current();
+  if(!original||!dest)throw Error('Hisob tanlanmagan');
+  if(original.kind!==dest.kind)throw Error('Ikkala hisob turi bir xil bo‘lishi kerak. Avval mos hisobga o‘ting');
+  const transactions=original.transactions;
+  if(!transactions.length)throw Error('Eski hisobda yozuvlar yo‘q');
+  if(transactions.length>4000)throw Error('Bir importda eng ko‘pi 4000 yozuv. Bunday kattaroq bazani alohida xavfsiz ko‘chirish kerak');
+  const amounts=transactions.reduce((a,x)=>{
+   a[x.kind]+=x.amount;return a;
+  },{income:0,expense:0});
+  const confirmText=dest.name+' hisobiga '+transactions.length+' ta eski yozuvni qo‘shasiz.\n'+
+   'Eski kirim: '+money(amounts.income)+', eski chiqim: '+money(amounts.expense)+'.\n'+
+   'DIQQAT: chatga oldin yozgan bir xil xarajatlaringiz bo‘lsa, JAMI IKKI MARTA HISOBLANADI. Davom etasizmi?';
+  if(!confirm(confirmText)||!confirm('Original ma’lumotlar o‘chirilmaydi. Zaxira faylingiz saqlanganmi? Ko‘chirishni boshlaysizmi?'))return;
+  const pieces=[];
+  for(let i=0;i<transactions.length;i+=20){
+   const chunk=transactions.slice(i,i+20).map(t=>({source_id:t.id,kind:t.kind,category:t.category,amount:t.amount,note:t.note,date:t.date}));
+   pieces.push(newOp({action:'import',source_workspace:original.id,source_kind:original.kind,entries:chunk}));
+  }
+  if(state.queue.length+pieces.length>250)throw Error('Sinxronlash navbati to‘lgan, avval mavjud amallarni yuboring');
+  if(!state.storageOK)throw Error('Mahalliy xotirada saqlash imkoni yo‘q');
+  state.queue.push(...pieces);
+  try{save();}catch(e){state.queue.splice(-pieces.length,pieces.length);throw e;}
+  alertMessage(transactions.length+' ta eski yozuv xavfsiz navbatga qo‘shildi. Internet tiklansa Turso’ga yuboriladi.',true);
+  noteStatus();flush();
+ }catch(e){alertMessage(e.message||'Import xatosi');}
+}
+
 function setup(){
  if(tg){try{tg.ready();tg.expand();}catch(e){}}
  $('month').value=state.month;
@@ -263,15 +307,29 @@ function setup(){
    alertMessage(parts.length+' ta yozuv telefonda saqlandi, serverga yuboriladi.',true);
   }catch(err){alertMessage(err.message);}
  };
- $('new-account').onclick=()=>{
-  if(state.queue.length){alertMessage('Yangi hisob ochishdan oldin navbatdagi yozuvlarni sinxronlang.');return;}
-  const kind=prompt('Hisob turi: personal / family / business','family');
-  if(!kind)return;
-  if(!F.KINDS[kind.trim()]){alertMessage('Hisob turi personal, family yoki business bo‘lishi kerak.');return;}
-  const name=prompt('Yangi hisob nomi:',F.KINDS[kind.trim()]);
-  if(name===null)return;
-  try{enqueue({action:'new_workspace',new_kind:kind.trim(),name:name.trim().slice(0,60)});}catch(e){alertMessage(e.message);}
+ $('new-account').onclick=()=>{$('account-form').classList.toggle('hidden');};
+ $('account-form').onsubmit=e=>{
+  e.preventDefault();
+  if(state.queue.length){alertMessage('Hisob ochishdan oldin navbatdagi yozuvlarni sinxronlang.');return;}
+  const kind=$('account-type').value,name=$('account-name').value.trim();
+  try{enqueue({action:'new_workspace',new_kind:kind,name:name.slice(0,60)});$('account-form').classList.add('hidden');$('account-name').value='';}
+  catch(err){alertMessage(err.message);}
  };
+ $('detect-legacy').onclick=()=>{
+  try{
+   const raw=localStorage.getItem('me_notes_finance_v1');
+   if(!raw)throw Error('Shu brauzerda eski moliya xotirasi topilmadi. Eski sahifadan JSON zaxira olib import qiling');
+   previewLegacy(JSON.parse(raw));
+  }catch(e){alertMessage(e.message);}
+ };
+ $('legacy-file').onchange=async(e)=>{
+  try{
+   const file=e.target.files?.[0];if(!file)return;
+   if(file.size>8000000)throw Error('Zaxira fayli 8 MB dan oshmasin');
+   previewLegacy(JSON.parse(await file.text()));
+  }catch(err){alertMessage('Zaxira o‘qilmadi: '+err.message);}
+ };
+ $('confirm-import').onclick=importLegacy;
  $('sync-now').onclick=pull;
  $('export-data').onclick=exportData;
  window.addEventListener('online',()=>{flush();pull();});
