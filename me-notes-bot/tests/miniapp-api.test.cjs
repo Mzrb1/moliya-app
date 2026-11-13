@@ -130,10 +130,10 @@ test('Import boshqa hisob turiga o‘tmaydi',async()=>{
 test('Importdagi original kategoriya mos bo‘lmasa izohda saqlanadi',async()=>{
  const {db,api}=await freshDb();
  await api.execute('111',{op_id:'web_aaaaaaaa00010',workspace_id:'personal-111',action:'import',source_workspace:'legacy1',source_kind:'personal',
- entries:[{source_id:'oldtx2',date:'2026-11-13',kind:'expense',amount:50000,category:'Bolalar',note:'pampers'}]});
+ entries:[{source_id:'oldtx2',date:'2026-11-13',kind:'expense',amount:50000,category:'Uy hayvonlari',note:'mushuk yemagi'}]});
  const r=await api.ledger('111','personal-111','2026-11');
  assert.equal(r.transactions[0].category,'Boshqa');
- assert.match(r.transactions[0].note,/Bolalar/);
+ assert.match(r.transactions[0].note,/Uy hayvonlari/);
  db.close();
 });
 test('O‘chirish qayta yuborilsa yozuv qayta paydo bo‘lmaydi',async()=>{
