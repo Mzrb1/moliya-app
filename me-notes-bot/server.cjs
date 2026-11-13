@@ -69,7 +69,7 @@ async function choose(uid){
 }
 const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 mln oylik\n\n'+
  '📋 Bir nechta xarajatni har qatorda yozing (20 tagacha):\nTushlik 98000\n18 ming yo‘lga\n\n'+
- '📁 /hisob — hisobni almashtirish\n📊 /hisobot — oylik natija\n🧮 /taqsimot — oylik pul rejasini ko‘rish\n'+
+ '📁 /hisob — hisobni almashtirish\n📊 /hisobot yoki /hisobot 2026-10 — kerakli oy\n🧮 /taqsimot yoki /taqsimot 2026-10 — oylik reja\n'+
  '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni bekor qilish\n'+
  'ℹ️ /yordam — yordam\n'+
  '📱 /start — Yagona moliya Mini App tugmasi\n\n'+
@@ -80,9 +80,9 @@ function checkSecret(input){
  return a.length===b.length&&timingSafeEqual(a,b);
 }
 // Chatdagi rejalar serverdagi TURSO yozuvlaridan hisoblanadi, Mini App localStorage’dan emas.
-async function monthlySalaryPlan(uid,w){
+async function monthlySalaryPlan(uid,w,range=thisMonth()){
  if(w.kind!=='personal')return null;
- const range=thisMonth();
+ if(!F.validMonth(range))throw Error('Oy noto‘g‘ri');
  const q=await db.execute({sql:"SELECT amount,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND kind='income' AND category='Maosh' AND day>=? AND day<?",
  args:[uid,w.id,range+'-01',nextMonth(range)+'-01']});
  if(!q.rows.length)return null;
@@ -187,18 +187,23 @@ async function handleMessage(update){
  if(command==='/start'){await send(chat_id,'Assalomu alaykum! 👋\n'+help,{reply_markup:await choose(uid)});return;}
  if(command==='/hisob'){await send(chat_id,'Hozirgi hisob: '+w.name+'\nHisobni tanlang:',{reply_markup:await choose(uid)});return;}
  if(command==='/yordam'||command==='/help'){await send(chat_id,help);return;}
- if(command==='/taqsimot'){await send(chat_id,salaryText(await monthlySalaryPlan(uid,w)));return;}
- if(command==='/hisobot'){
-  const q=await db.execute({sql:'SELECT kind, SUM(amount) AS total FROM mn_transactions WHERE workspace_id=? AND day>=? AND day<? GROUP BY kind',args:[w.id,thisMonth()+'-01',nextMonth(thisMonth())+'-01']});
+ if(command==='/taqsimot'||command==='/hisobot'){
+  const month=(text.split(/\s+/)[1]||thisMonth());
+  if(!F.validMonth(month)){await send(chat_id,'Oy noto‘g‘ri. Misol: '+command+' 2026-10');return;}
+  if(command==='/taqsimot'){await send(chat_id,salaryText(await monthlySalaryPlan(uid,w,month)));return;}
+  const q=await db.execute({sql:'SELECT kind, SUM(amount) AS total FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<? GROUP BY kind',args:[uid,w.id,month+'-01',nextMonth(month)+'-01']});
   const totals=Object.fromEntries(q.rows.map(r=>[r.kind,Number(r.total)]));
   const inc=totals.income||0,out=totals.expense||0;
-  await send(chat_id,'📊 '+w.name+' — '+thisMonth()+'\n➕ Daromad: '+F.money(inc)+'\n➖ Xarajat: '+F.money(out)+'\n📌 Farq: '+F.money(inc-out)+'\n(Bankdagi haqiqiy qoldiq emas)');
+  await send(chat_id,'📊 '+w.name+' — '+month+'\n➕ Daromad: '+F.money(inc)+'\n➖ Xarajat: '+F.money(out)+'\n📌 Farq: '+F.money(inc-out)+'\n(Bankdagi haqiqiy qoldiq emas)');
   return;
  }
  if(command==='/bekor'){
-  const q=await db.execute({sql:'SELECT id,update_id,category,amount FROM mn_transactions WHERE uid=? AND workspace_id=? ORDER BY rowid DESC LIMIT 1',args:[uid,w.id]});
+  const q=await db.execute({sql:'SELECT id,update_id,category,amount,day FROM mn_transactions WHERE uid=? AND workspace_id=? ORDER BY rowid DESC LIMIT 1',args:[uid,w.id]});
   if(!q.rows.length){await send(chat_id,'Bekor qilinadigan yozuv yo‘q.');return;}
   const t=q.rows[0],tag=Number(t.update_id);
+  if(await financeApi.closed(uid,w.id,String(t.day).slice(0,7))){
+   await send(chat_id,'🗃 Bu oy arxivlangan. Avval Mini App → Sozlamalar → Oylik arxivdan oyni qayta oching.');return;
+  }
   if(tag<0){
    const {lower,upper}=listRangeForId(tag);
    const rows=await db.execute({sql:'SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS total FROM mn_transactions WHERE uid=? AND workspace_id=? AND update_id BETWEEN ? AND ?',
