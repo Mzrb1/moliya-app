@@ -97,16 +97,23 @@ async function fetchWorkspaces(){
  save();
 }
 async function fetchLedger(){
- if(!current())return;
- const data=await request('/ledger?workspace='+encodeURIComponent(state.active)+'&month='+encodeURIComponent(state.month));
- state.base[key()]={transactions:data.transactions,budgets:data.budgets,closed_at:data.closed_at||null,
-  category_options:data.category_options||F.BASE[current().kind],
+ const wid=state.active,month=state.month;
+ const workspace=state.workspaces.find(w=>w.id===wid);
+ if(!workspace)return;
+ const data=await request('/ledger?workspace='+encodeURIComponent(wid)+'&month='+encodeURIComponent(month));
+ // Pin an asynchronous response to the requested account and month, not the
+ // account/month currently selected when it eventually arrives.
+ if(data.workspace?.id!==wid||data.month!==month)throw Error('Serverdan boshqa oy yoki hisob kelgan');
+ state.base[wid+'|'+month]={transactions:data.transactions,budgets:data.budgets,closed_at:data.closed_at||null,
+  category_options:data.category_options||F.BASE[workspace.kind],
   keywords:data.keywords||{income:{},expense:{}}};
  save();
 }
 async function fetchMonthHistory(){
- if(!current())return;
- const data=await request('/months?workspace='+encodeURIComponent(state.active));
+ const wid=state.active;
+ if(!state.workspaces.some(w=>w.id===wid))return;
+ const data=await request('/months?workspace='+encodeURIComponent(wid));
+ if(wid!==state.active)return;
  state.months=data.months;
  renderMonthHistory();
 }
