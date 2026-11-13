@@ -8,6 +8,7 @@ const cacheUid=String(tg?.initDataUnsafe?.user?.id||'');
 const CACHE_KEY='me_notes_unified_cache_'+cacheUid,QUEUE_KEY='me_notes_unified_queue_'+cacheUid;
 const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),views:'home',base:{},queue:[],online:false,storageOK:true,busy:false};
 let legacyBackup=null;
+let editingId=null;
 function el(tag,cls,text){const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x;}
 function alertMessage(text,ok=false){
  const zone=$('notices');zone.replaceChildren();
@@ -38,6 +39,8 @@ function compute(){
  const snapshot=cached()||{transactions:[],budgets:{}};
  const items=(snapshot.transactions||[]).map(t=>({...t}));
  const budgets={...(snapshot.budgets||{})};
+ const prefs={categories:structuredClone(snapshot.category_options||F.BASE[w.kind]),
+  keywords:structuredClone(snapshot.keywords||{income:{},expense:{}})};
  for(const op of state.queue){
   if(op.workspace_id!==w.id)continue;
   if(op.action==='add'||op.action==='add_many'){
@@ -46,13 +49,28 @@ function compute(){
   }else if(op.action==='delete'){
    const pos=items.findIndex(t=>t.id===op.transaction_id);
    if(pos>=0)items.splice(pos,1);
+  }else if(op.action==='edit'){
+   const index=items.findIndex(t=>t.id===op.transaction_id);
+   if(index>=0){items[index]={...items[index],...op.entry};
+    if(items[index].date.slice(0,7)!==state.month)items.splice(index,1);}
   }else if(op.action==='budget'&&op.month===state.month){
    if(Number(op.limit)===0)delete budgets[op.category];else budgets[op.category]=Number(op.limit);
+  }else if(op.action==='category_add'){
+   if(prefs.categories[op.kind]&&!prefs.categories[op.kind].includes(op.name))prefs.categories[op.kind].push(op.name);
+  }else if(op.action==='category_delete'){
+   if(prefs.categories[op.kind])prefs.categories[op.kind]=prefs.categories[op.kind].filter(x=>x!==op.name);
+  }else if(op.action==='keyword_add'){
+   const lst=(prefs.keywords[op.kind]??={})[op.category]??=[];
+   if(!lst.includes(op.word))lst.push(op.word);
+   prefs.keywords[op.kind][op.category]=lst;
+  }else if(op.action==='keyword_delete'){
+   const lst=prefs.keywords[op.kind]?.[op.category];
+   if(lst)prefs.keywords[op.kind][op.category]=lst.filter(x=>x!==op.word);
   }
  }
- const shadow={kind:w.kind,categories:F.BASE[w.kind],transactions:items,budgets:{[state.month]:budgets}};
+ const shadow={kind:w.kind,categories:prefs.categories,keywords:prefs.keywords,transactions:items,budgets:{[state.month]:budgets}};
  const summary=F.summary(shadow,state.month);
- return {items,summary,plan:F.salaryAllocation(shadow,state.month),w};
+ return {items,summary,plan:F.salaryAllocation(shadow,state.month),w,prefs};
 }
 function noteStatus(text){
  $('sync-status').textContent=text||((state.online?'🟢 Telegram bilan ulangan':'🟠 Offline / ulanmagan')+
@@ -81,7 +99,9 @@ async function fetchWorkspaces(){
 async function fetchLedger(){
  if(!current())return;
  const data=await request('/ledger?workspace='+encodeURIComponent(state.active)+'&month='+encodeURIComponent(state.month));
- state.base[key()]={transactions:data.transactions,budgets:data.budgets};
+ state.base[key()]={transactions:data.transactions,budgets:data.budgets,
+  category_options:data.category_options||F.BASE[current().kind],
+  keywords:data.keywords||{income:{},expense:{}}};
  save();
 }
 async function pull(){
@@ -139,7 +159,7 @@ async function flush(){
 }
 function chooseView(name){
  state.views=name;
- for(const view of ['home','records','budget','settings'])$('view-'+view).classList.toggle('hidden',view!==name);
+ for(const view of ['home','records','budget','report','settings'])$('view-'+view).classList.toggle('hidden',view!==name);
  document.querySelectorAll('.bottom [data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===name));
  window.scrollTo?.({top:0,behavior:'smooth'});
 }
@@ -234,7 +254,9 @@ function parseInput(raw){
   items=[one];
  }
  const w=current();
- return items.map(x=>({kind:x.kind,amount:x.amount,date:F.today(),note:x.note,category:F.categoryFor({kind:w.kind,categories:F.BASE[w.kind]},x.kind,x.note)}));
+ const prefs=compute()?.prefs||{categories:F.BASE[w.kind],keywords:{income:{},expense:{}}};
+ return items.map(x=>({kind:x.kind,amount:x.amount,date:F.today(),note:x.note,
+  category:F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},x.kind,x.note)}));
 }
 function showPreview(){
  const raw=$('quick-text').value;
