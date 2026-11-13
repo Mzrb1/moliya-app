@@ -22,9 +22,10 @@ jobs:
           node --check me-notes-sahifalab/finance-core.js
           node --check me-notes-sahifalab/finance-ui.js
           node --check me-notes-bot/server.cjs
+          node --check me-notes-bot/list-utils.cjs
           node --check me-notes-bot/scripts/set-webhook.cjs
       - name: Finance parser and accounting
-        run: node --test tests/finance-core.test.cjs
+        run: node --test tests/finance-core.test.cjs tests/me-notes-list.test.cjs
       - name: HTML one-message integration
         run: |
           node -e "const fs=require('fs');const h=fs.readFileSync('me-notes-sahifalab/finance.html','utf8');if(!h.includes('25 ming taksi')||!h.includes('finance-ui.js'))throw Error('Quick entry missing')"
