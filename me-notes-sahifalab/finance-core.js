@@ -156,7 +156,7 @@ function parseList(raw){
 function categoryFor(w,kind,note){
  if(!['income','expense'].includes(kind))throw Error('Operatsiya turi noto‘g‘ri');
  const value=normalizeKeyword(note);
- if(!value)return w.categories[kind].at(-1);
+ if(!value)return w.categories[kind].includes('Boshqa')?'Boshqa':w.categories[kind].at(-1);
  // Har bir hisobga maxsus qo‘shilgan kalit so‘z birinchi o‘rinda turadi.
  for(const category of w.categories[kind]){
   const custom=w.keywords?.[kind]?.[category]||[];
@@ -168,7 +168,7 @@ function categoryFor(w,kind,note){
    if(category)return category;
   }
  }
- return w.categories[kind].at(-1);
+ return w.categories[kind].includes('Boshqa')?'Boshqa':w.categories[kind].at(-1);
 }
 // ME Notes oylik taqsimot (foizlar testdan o‘tganicha tasdiqlangan).
 // Maosh real daromad sifatida bitta yozuv; bu summalar yangi xarajat EMAS.
