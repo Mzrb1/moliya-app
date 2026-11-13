@@ -20,10 +20,82 @@ function amount(n){const value=Number(n);if(!Number.isSafeInteger(value)||value<
 function validDay(s){if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const d=new Date(s+'T12:00:00Z');return !Number.isNaN(+d)&&d.toISOString().slice(0,10)===s;}
 function validMonth(s){return typeof s==='string'&&/^\d{4}-(0[1-9]|1[0-2])$/.test(s);}
 function fresh(){return {version:VERSION,active:null,workspaces:[]};}
+
+// Har bir soha uchun kengaytiriladigan lug‘at. Bir xil parser Mini App va chatda ishlatiladi.
+const KEYWORD_RULES={
+ expense:[
+  {categories:['Transport'],words:["taksi","taxi","yo'l","yo'lkira","yolkira","yul","avtobus","marshrutka","metro","benzin","dizel","zapravka","azs","avtoyuvish","parkovka","avtoservis","shina","yandex","indrive","transport","yo'lovchi","yonilg'i","yoqilg'i","chipta"]},
+  {categories:['Bolalar'],words:["farzand","bolalar","bolaga","bog'cha","pampers","taglik","o'yinchoq","chaqaloq","maktab formasi","bolalar kiyimi"]},
+  {categories:['Ta\'lim'],words:["o'qish","o'quv","maktab","kurs","kontrakt","kitob","daftar","repetitor","dars","ustoz","universitet","ta'lim","o'qituvchi"]},
+  {categories:['Bozor','Oziq-ovqat'],words:["bozor","oziq ovqat","supermarket","market","magazin","do'kon","dukon","non","tuxum","go'sht","guruch","sabzi","kartoshka","meva","sabzavot","sut","shakar","tushlik","nonushta","kechki ovqat","restoran","kafe","osh","palov","kabob","somsa","burger","ichimlik","ovqat"]},
+  {categories:['Kommunal'],words:["kommunal","elektr","svet","gaz","suv","internet","wifi","wi fi","telefon","mobil aloqa","tarif","beeline","ucell","uzmobile","mobiuz","chiqindi","axlat","issiq suv"]},
+  {categories:['Sog\'liq'],words:["sog'liq","dori","apteka","dorixona","doktor","vrach","shifokor","poliklinika","shifoxona","kasalxona","analiz","tahlil","stomatolog","tish","ukol","davolanish","emlash"]},
+  {categories:['Kiyim'],words:["kiyim","ko'ylak","kuylak","shim","futbolka","kurtka","krossovka","tufli","etik","poyabzal","ro'mol","sharf","kostyum","paypoq"]},
+  {categories:["Uy-ro'zg'or"],words:["ro'zg'or","uy uchun","mebel","tozalash","sovun","kir yuvish","changyutgich","maishiy","remont","ta'mir","kir sovun","idish","xo'jalik"]},
+  {categories:['Dam olish'],words:["dam olish","kino","sayohat","hordiq","teatr","park","o'yin","futbol","piknik","ekskursiya","to'y","sayr","attraksion"]},
+  {categories:['Ish haqi'],words:["ish haqi","oylik","maosh","ishchi","xodim","hodim","brigada","usta haqi","ishchi puli"]},
+  {categories:['Tovar'],words:["tovar","mahsulot","xomashyo","material","qadoq","quti","paket","ombor","sklad","mol olib","tovar olish","yetkazib beruvchi","zakupka"]},
+  {categories:['Ijara'],words:["ijara","arenda","ofis ijarasi","do'kon ijarasi","bino ijarasi"]},
+  {categories:['Reklama'],words:["reklama","target","targeting","ads","smm","blogger","banner","baner","promoushn","reklama posti"]}
+ ],
+ income:[
+  {categories:['Maosh'],words:["oylik","maosh","avans","ish haqi","ish xaqi","ishdagi oylik"]},
+  {categories:["Sovg'a"],words:["sovg'a","sovga","hadya","bonus","mukofot","bayram puli"]},
+  {categories:["Oilaviy kirim"],words:["oilaviy kirim","oilaviy daromad","erim","turmush o'rtog'im","nafaqa","pensiya","oilaviy yordam"]},
+  {categories:["Savdo tushumi"],words:["savdo","sotuv","tushum","kassa","xaridor","terminal","sotildi","realizatsiya","naqd savdo"]},
+  {categories:["Xizmat daromadi"],words:["xizmat","mijoz","usta","loyiha","konsultatsiya","shartnoma","buyurtma","zakaz","freelance","frilans"]},
+  {categories:["Qo'shimcha ish"],words:["qo'shimcha","usta","freelance","frilans","buyurtma","zakaz","xizmat","yon ish","qurilish"]}
+ ]
+};
+const CYRILLIC={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'yo',ж:'j',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'x',ц:'ts',ч:'ch',ш:'sh',щ:'sh',ъ:"'",ы:'i',ь:'',э:'e',ю:'yu',я:'ya',қ:'q',ғ:"g'",ҳ:'h',ў:"o'",і:'i'};
+function normalizeKeyword(text){
+ return String(text??'').toLowerCase()
+  .replace(/[\u2018\u2019\u02bb\u02bc\u0060\u00b4\u201b\u201a\uFF07]/g,"'")
+  .replace(/[а-яёқғҳўі]/g,c=>CYRILLIC[c]??c)
+  .replace(/[^a-z0-9'\s]+/g,' ')
+  .replace(/\s+/g,' ').trim();
+}
+const SUFFIXES=['ga','ka','qa','da','dan','ni','ning','lar','lari','larda','larga','lardan','larim','larimiz','im','imiz','si','sini','siga','sidan','dan','dagi','ga','gi','imga','imni','ga','da'];
+function wordMatches(found,keyword){
+ if(found===keyword)return true;
+ return SUFFIXES.some(suffix=>found===keyword+suffix);
+}
+function keywordMatches(text,keyword){
+ const words=normalizeKeyword(text).split(' ').filter(Boolean);
+ const keys=normalizeKeyword(keyword).split(' ').filter(Boolean);
+ if(!keys.length)return false;
+ for(let i=0;i<=words.length-keys.length;i++){
+  if(keys.every((key,j)=>j===keys.length-1?wordMatches(words[i+j],key):words[i+j]===key))return true;
+ }
+ return false;
+}
+function addKeyword(w,kind,category,word){
+ if(!['income','expense'].includes(kind)||!w.categories[kind].includes(category))throw Error('Kategoriya noto‘g‘ri');
+ const normalized=normalizeKeyword(word);
+ if(normalized.length<2||normalized.length>48||!/^[a-z]/.test(normalized))throw Error('Kalit so‘z 2–48 ta harfdan iborat bo‘lsin');
+ const dictionary=w.keywords??={income:{},expense:{}};
+ dictionary[kind]??={};
+ const entries=dictionary[kind][category]??=[];
+ if(entries.length>=30)throw Error('Bitta kategoriya uchun ko‘pi bilan 30 ta kalit so‘z');
+ for(const [cat,words] of Object.entries(dictionary[kind])){
+  if(words.some(w=>normalizeKeyword(w)===normalized))throw Error(cat===category?'Bu kalit so‘z allaqachon bor':'Bu kalit so‘z boshqa kategoriyaga biriktirilgan');
+ }
+ entries.push(normalized);
+ return normalized;
+}
+function removeKeyword(w,kind,category,word){
+ const list=w.keywords?.[kind]?.[category];
+ if(!list)throw Error('Kalit so‘z topilmadi');
+ const normalized=normalizeKeyword(word);
+ const pos=list.findIndex(k=>normalizeKeyword(k)===normalized);
+ if(pos<0)throw Error('Kalit so‘z topilmadi');
+ list.splice(pos,1);
+}
+
 function create(s,kind,name){
  if(!KINDS[kind])throw Error('Hisob turi noto‘g‘ri');
  if(s.workspaces.length>=MAX_WORKSPACES)throw Error('Ko‘pi bilan 12 ta hisob ochish mumkin');
- const w={id:id(),kind,name:cleanText(name,60)||KINDS[kind],categories:JSON.parse(JSON.stringify(BASE[kind])),transactions:[],budgets:{}};
+ const w={id:id(),kind,name:cleanText(name,60)||KINDS[kind],categories:JSON.parse(JSON.stringify(BASE[kind])),keywords:{income:{},expense:{}},transactions:[],budgets:{}};
  s.workspaces.push(w);s.active=w.id;return w;
 }
 function current(s){return s.workspaces.find(w=>w.id===s.active)||null;}
@@ -57,34 +129,21 @@ function parseFast(raw){
  return {kind,amount:amount(total),note};
 }
 function categoryFor(w,kind,note){
- const t=String(note||'').toLowerCase();
- if(kind==='income'){
-  const rules=[
-    ['Maosh',['oylik','maosh','avans']],
-    ['Savdo tushumi',['savdo','sotuv','tushum']],
-    ['Xizmat daromadi',['xizmat','usta','freelance']],
-    ["Sovg'a",['sovga','sovg‘a',"sovg'a"]]
-  ];
-  for(const [cat,keys] of rules)if(w.categories.income.includes(cat)&&keys.some(k=>t.includes(k)))return cat;
-  return w.categories.income.at(-1);
+ if(!['income','expense'].includes(kind))throw Error('Operatsiya turi noto‘g‘ri');
+ const value=normalizeKeyword(note);
+ if(!value)return w.categories[kind].at(-1);
+ // Har bir hisobga maxsus qo‘shilgan kalit so‘z birinchi o‘rinda turadi.
+ for(const category of w.categories[kind]){
+  const custom=w.keywords?.[kind]?.[category]||[];
+  if(custom.some(word=>keywordMatches(value,word)))return category;
  }
- const rules=[
-  [['Transport'],['taksi','avtobus',"yo'l",'benzin','metro','yandex']],
-  [['Bozor','Oziq-ovqat'],['bozor','market','supermarket','magazin','tushlik','non','ovqat','kafe']],
-  [['Kommunal'],['svet','gaz','internet','suv','elektr']],
-  [['Kiyim'],['kiyim','krossovka','futbolka']],
-  [["Sog'liq"],['dori','shifoxona','doktor']],
-  [['Reklama'],['reklama']],
-  [['Ijara'],['ijara']],
-  [['Tovar'],['tovar','xomashyo','material']]
- ];
- for(const [cats,keys] of rules){
-  if(keys.some(k=>t.includes(k))){
-   const category=cats.find(cat=>w.categories.expense.includes(cat));
+ for(const rule of KEYWORD_RULES[kind]){
+  if(rule.words.some(word=>keywordMatches(value,word))){
+   const category=rule.categories.find(cat=>w.categories[kind].includes(cat));
    if(category)return category;
   }
  }
- return w.categories.expense.at(-1);
+ return w.categories[kind].at(-1);
 }
 function addTransaction(w,{kind,amount:val,date=today(),category,note=''}) {
  if(!['income','expense'].includes(kind))throw Error('Operatsiya turi noto‘g‘ri');
@@ -131,12 +190,24 @@ function validate(raw){
  for(const item of raw.workspaces){
   if(!item||typeof item!=='object'||!KINDS[item.kind]||typeof item.id!=='string'||!item.id||ids.has(item.id))throw Error('Hisob ma’lumoti noto‘g‘ri');
   ids.add(item.id);
-  const w={id:item.id,kind:item.kind,name:cleanText(item.name,60)||KINDS[item.kind],categories:{expense:[],income:[]},transactions:[],budgets:{}};
+  const w={id:item.id,kind:item.kind,name:cleanText(item.name,60)||KINDS[item.kind],categories:{expense:[],income:[]},keywords:{income:{},expense:{}},transactions:[],budgets:{}};
   for(const kind of ['income','expense']){
    const cats=item.categories?.[kind];
    if(!Array.isArray(cats)||!cats.length||cats.length>50)throw Error('Kategoriya ma’lumoti noto‘g‘ri');
    w.categories[kind]=cats.map(c=>cleanText(c,80));
    if(w.categories[kind].some(c=>!c)||new Set(w.categories[kind]).size!==w.categories[kind].length)throw Error('Kategoriya takrorlangan');
+  }
+  // Eski zaxiralarda keywords yo‘q: bo‘sh lug‘atni qo‘yib moslikni saqlaymiz.
+  if(item.keywords!==undefined){
+   if(!item.keywords||typeof item.keywords!=='object'||Array.isArray(item.keywords))throw Error('Kalit so‘zlar ma’lumoti noto‘g‘ri');
+   for(const kind of ['income','expense']){
+    const group=item.keywords[kind]??{};
+    if(!group||typeof group!=='object'||Array.isArray(group))throw Error('Kalit so‘zlar ma’lumoti noto‘g‘ri');
+    for(const [cat,words] of Object.entries(group)){
+     if(!w.categories[kind].includes(cat)||!Array.isArray(words)||words.length>30)throw Error('Kalit so‘zlar ma’lumoti noto‘g‘ri');
+     for(const word of words)addKeyword(w,kind,cat,word);
+    }
+   }
   }
   if(!Array.isArray(item.transactions)||item.transactions.length>50000)throw Error('Yozuvlar soni oshib ketgan');
   const txIds=new Set();
@@ -160,5 +231,5 @@ function validate(raw){
  return result;
 }
 function csv(w){const quote=v=>{let s=String(v??'');if(/^[\s]*[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};return '\ufeff'+[['Sana','Hisob','Turi','Kategoriya','Summa','Izoh'],...w.transactions.map(t=>[t.date,w.name,t.kind==='income'?'Daromad':'Xarajat',t.category,t.amount,t.note])].map(r=>r.map(quote).join(';')).join('\r\n');}
-return {KINDS,BASE,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,validate,csv,spent};
+return {KINDS,BASE,KEYWORD_RULES,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,validate,csv,spent};
 });

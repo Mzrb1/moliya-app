@@ -82,7 +82,46 @@ function renderReport(){
  }
  if(!target.children.length){const p=document.createElement('p');p.className='small';p.textContent='Hali xarajat yoki limit yo‘q.';target.append(p);}
 }
-function render(){renderWorkspaces();if(!active())return;categoryOptions();renderTransactions();renderBudgets();renderReport();}
+
+function renderKeywordCategories(){
+ const w=active();if(!w)return;
+ const kind=$('keyword-kind').value;
+ const selector=$('keyword-category'),old=selector.value;
+ selector.replaceChildren(...w.categories[kind].map(c=>asOption(c,c)));
+ if(w.categories[kind].includes(old))selector.value=old;
+}
+function renderKeywordList(){
+ const w=active();if(!w)return;
+ renderKeywordCategories();
+ const kind=$('keyword-kind').value,category=$('keyword-category').value;
+ const chosen=$('keyword-list');chosen.replaceChildren();
+ const custom=w.keywords?.[kind]?.[category]||[];
+ const label=document.createElement('p');label.className='hint';
+ label.textContent='Siz qo‘shgan kalit so‘zlar: '+(custom.length?'':'hali yo‘q. Asosiy lug‘at avtomatik ishlaydi.');
+ chosen.append(label);
+ for(const word of custom){
+  const line=document.createElement('div');line.className='row split line';
+  const strong=document.createElement('strong');strong.textContent=word;
+  const button=document.createElement('button');button.type='button';button.className='danger';button.textContent='O‘chirish';button.style.cssText='min-height:33px;padding:6px 10px;font-size:12px';
+  button.addEventListener('click',()=>safeAction(()=>{
+   F.removeKeyword(w,kind,category,word);
+   if(commit()){renderKeywordList();notice('Kalit so‘z o‘chirildi');}
+  }));
+  line.append(strong,button);chosen.append(line);
+ }
+}
+function updateQuickPreview(){
+ const w=active(),element=$('quick-preview');
+ if(!w)return;
+ let parsed;
+ try{parsed=F.parseFast($('quick-text').value);}catch(e){parsed=null;}
+ if(!parsed){element.textContent='';return;}
+ const category=F.categoryFor(w,parsed.kind,parsed.note);
+ element.textContent='Taniladigan bo‘lim: '+category+' • '+fmt(parsed.amount)
+   +(category==='Boshqa'?' · Kalit so‘zni Sozlamalarga qo‘shishingiz mumkin.':'');
+}
+
+function render(){renderWorkspaces();if(!active())return;categoryOptions();renderTransactions();renderBudgets();renderReport();renderKeywordList();updateQuickPreview();}
 function setView(next){
  view=next;
  document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===next));
@@ -104,11 +143,19 @@ $('month').value=F.today().slice(0,7);
 $('month').addEventListener('change',()=>{if(!F.validMonth(month())){$('month').value=F.today().slice(0,7);}render();});
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 $('kind').addEventListener('change',categoryOptions);
+$('quick-text').addEventListener('input',updateQuickPreview);
+$('keyword-kind').addEventListener('change',renderKeywordList);
+$('keyword-category').addEventListener('change',renderKeywordList);
+$('keyword-form').addEventListener('submit',e=>{e.preventDefault();safeAction(()=>{
+ const w=active(),kind=$('keyword-kind').value,category=$('keyword-category').value;
+ F.addKeyword(w,kind,category,$('keyword-value').value);
+ if(commit()){$('keyword-value').value='';renderKeywordList();updateQuickPreview();notice('Kalit so‘z saqlandi ✓');}
+});});
 $('quick-form').addEventListener('submit',e=>{e.preventDefault();safeAction(()=>{
  const w=active();const parsed=F.parseFast($('quick-text').value);
  if(!parsed)throw Error('Misol: 25 ming taksi, tushlik 35000 yoki +3 mln oylik');
  const result=F.addTransaction(w,{...parsed,date:F.today()});
- if(commit()){$('quick-text').value='';render();notice('Yozuv saqlandi ✓ '+(result.alert||''));}
+ if(commit()){$('quick-text').value='';render();notice('Yozuv saqlandi ✓ '+result.tx.category+' • '+fmt(result.tx.amount)+' '+(result.alert||''));}
 });});
 $('entry-form').addEventListener('submit',e=>{e.preventDefault();safeAction(()=>{
  const w=active();const values={kind:$('kind').value,date:$('date').value,amount:Number($('amount').value),category:$('category').value,note:$('note').value};

@@ -79,3 +79,88 @@ test('Bog‘langan sonlar 25 000 taksi',()=>assert.deepEqual(F.parseFast('25 000
 test('Bozor oilaviy hisob kategoriyasi',()=>{const {w}=fixture('family');assert.equal(F.categoryFor(w,'expense','bozor'),'Bozor');});
 test('Kichik biznes savdosi kategoriyasi',()=>{const {w}=fixture('business');assert.equal(F.categoryFor(w,'income','savdo tushumi'),'Savdo tushumi');});
 test('Mantiqsiz qiymatlar qabul qilinmaydi',()=>{for(const q of ['taksi','0 taksi','-25 ming','1,234,567 taksi','9999999999999999 taksi']){assert.equal(F.parseFast(q),null);}});
+
+
+test('Transportga yo‘lga so‘zining 4 xil apostrof yozilishi',()=>{
+ const {w}=fixture();
+ for(const phrase of ["yo'lga","yo‘lga","yoʻlga","йўлга","taksiga","yo'lkiraga","benzin"]){
+  assert.equal(F.categoryFor(w,'expense',phrase),'Transport',phrase);
+ }
+});
+test('Transportni boshqa so‘z ichida chalkashtirmaydi',()=>{
+ const {w}=fixture();
+ assert.equal(F.categoryFor(w,'expense','gazeta'),'Boshqa');
+});
+test('Shaxsiy har bir asosiy kategoriya uchun bir nechta so‘z',()=>{
+ const {w}=fixture();
+ const cases=[
+  ["tushlikka","Oziq-ovqat"],
+  ["bozorga","Oziq-ovqat"],
+  ["svetga","Kommunal"],
+  ["doriga","Sog'liq"],
+  ["futbolkaga","Kiyim"],
+  ["maktabga","Ta'lim"],
+  ["mebelga","Uy-ro'zg'or"],
+  ["kinoga","Dam olish"]
+ ];
+ for(const [note,cat] of cases)assert.equal(F.categoryFor(w,'expense',note),cat,note);
+});
+test('Oilaviy hisob: bolalar, bozor, ta’lim, transport, kirim',()=>{
+ const {w}=fixture('family');
+ for(const [note,cat] of [
+  ["bog‘chaga","Bolalar"],["pampersga","Bolalar"],["bozorga","Bozor"],
+  ["maktabga","Ta'lim"],["yo‘lga","Transport"]]){
+  assert.equal(F.categoryFor(w,'expense',note),cat,note);
+ }
+ assert.equal(F.categoryFor(w,'income','nafaqadan'),'Oilaviy kirim');
+});
+test('Biznes hisob: tovar, reklama, ish haqi, ijara, tushum',()=>{
+ const {w}=fixture('business');
+ for(const [note,cat] of [
+   ["tovarga","Tovar"],["targetga","Reklama"],["ishchilarga","Ish haqi"],
+   ["ijaraga","Ijara"],["yo‘lga","Transport"]]){
+  assert.equal(F.categoryFor(w,'expense',note),cat,note);
+ }
+ assert.equal(F.categoryFor(w,'income','savdodan'),'Savdo tushumi');
+ assert.equal(F.categoryFor(w,'income','mijozdan xizmat'),'Xizmat daromadi');
+});
+test('Maxsus kalit so‘z boshqa standart lug‘atdan oldinda',()=>{
+ const {w}=fixture('personal');
+ F.addKeyword(w,'expense','Transport','magazin');
+ assert.equal(F.categoryFor(w,'expense','magazinga'),'Transport');
+ F.removeKeyword(w,'expense','Transport','magazin');
+ assert.equal(F.categoryFor(w,'expense','magazinga'),'Oziq-ovqat');
+});
+test('Kalit so‘z har hisob uchun alohida',()=>{
+ const s=F.fresh(),a=F.create(s,'personal'),b=F.create(s,'family');
+ F.addKeyword(a,'expense','Transport','elektrosamokat');
+ assert.equal(F.categoryFor(a,'expense','elektrosamokat'),'Transport');
+ assert.equal(F.categoryFor(b,'expense','elektrosamokat'),'Boshqa');
+});
+test('Kalit so‘z takrori yoki noto‘g‘ri kategoriya rad qilinadi',()=>{
+ const {w}=fixture();
+ F.addKeyword(w,'expense','Transport','elektrosamokat');
+ assert.throws(()=>F.addKeyword(w,'expense',"Oziq-ovqat",'elektrosamokat'));
+ assert.throws(()=>F.addKeyword(w,'expense','Yo‘q kategoriya','yangi'));
+});
+test('Eski localStorage zaxirasi va yangi kalit so‘zli zaxira',()=>{
+ const {s,w}=fixture();
+ delete w.keywords; // old version
+ const restored=F.validate(JSON.parse(JSON.stringify(s)));
+ assert.deepEqual(restored.workspaces[0].keywords,{income:{},expense:{}});
+ F.addKeyword(restored.workspaces[0],'expense','Transport','skuter');
+ const again=F.validate(JSON.parse(JSON.stringify(restored)));
+ assert.equal(F.categoryFor(again.workspaces[0],'expense','skuterga'),'Transport');
+});
+test('Zaxiradagi buzilgan kalit so‘zlar bloklanadi',()=>{
+ const {s,w}=fixture();
+ w.keywords.expense.Transport=['taksi','taksi'];
+ assert.throws(()=>F.validate(s));
+});
+test('Mavjud yozuvlar toifasi lug‘at o‘zgarganda avtomatik o‘zgarmaydi',()=>{
+ const {w}=fixture();
+ const {tx}=F.addTransaction(w,{kind:'expense',amount:25000,date:'2026-11-13',note:'yo‘lga',category:'Boshqa'});
+ assert.equal(tx.category,'Boshqa');
+ assert.equal(F.categoryFor(w,'expense','yo‘lga'),'Transport');
+ assert.equal(F.summary(w,'2026-11').transactions[0].category,'Boshqa');
+});
