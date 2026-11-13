@@ -8,6 +8,7 @@ const {createClient}=require('@libsql/client');
 const F=require('../me-notes-sahifalab/finance-core.js');
 const {listLineUpdateId,listRangeForId}=require('./list-utils.cjs');
 const {makeFinanceApi}=require('./miniapp-api.cjs');
+const {requestRoute}=require('./request-route.cjs');
 function env(key){const x=process.env[key];if(!x)throw Error('Missing '+key);return x;}
 const token=env('BOT_TOKEN');
 const secret=env('TELEGRAM_WEBHOOK_SECRET');
@@ -267,12 +268,10 @@ async function main(){
  await init();
  await financeApi.init();
  http.createServer(async(req,res)=>{
-  if(req.url==='/health'&&req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}');return;}
-  if(req.url!=='/telegram/webhook'||req.method!=='POST'){res.writeHead(404);res.end();return;}
-  if(req.url?.startsWith('/api/v1/')){
-   await financeApi.handle(req,res);
-   return;
-  }
+  const route=requestRoute(req.method,req.url);
+  if(route==='health'){res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}');return;}
+  if(route==='api'){await financeApi.handle(req,res);return;}
+  if(route==='not_found'){res.writeHead(404);res.end();return;}
   if(!checkSecret(req.headers['x-telegram-bot-api-secret-token'])){res.writeHead(403);res.end();return;}
   try{
    let body='';for await(const part of req){body+=part;if(body.length>64000){res.writeHead(413);res.end();return;}}
