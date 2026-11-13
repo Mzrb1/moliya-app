@@ -50,6 +50,38 @@ function renderTransactions(){
   line.append(a,b);box.append(line);
  }
 }
+function renderAllocation(){
+ const w=active();if(!w)return;
+ const plan=F.salaryAllocation(w,month()),msg=$('allocation-empty'),panel=$('allocation-panel'),buckets=$('allocation-buckets'),targets=$('allocation-targets');
+ buckets.replaceChildren();targets.replaceChildren();
+ panel.classList.toggle('hidden',!plan);
+ if(!plan){
+  msg.textContent=w.kind==='personal'?'Bu oyda hozircha “Maosh” kategoriyasida daromad yo‘q. “+5 mln oylik” kiriting.':
+   'Avtomatik 2,5% / 10% / 10% / 45% / 55% taqsimot hozircha faqat Shaxsiy hisobda ishlaydi.';
+  return;
+ }
+ msg.textContent='';
+ $('allocation-total').textContent='Oylik: '+fmt(plan.salary);
+ for(const [key,label] of F.SALARY_BUCKETS){
+  const line=document.createElement('div');line.className='line row split';
+  const name=document.createElement('strong');name.textContent=label;
+  const value=document.createElement('span');value.style.fontWeight='700';value.textContent=fmt(plan[key]);
+  line.append(name,value);buckets.append(line);
+ }
+ const warn=$('allocation-warning');
+ const deficits=[];
+ if(plan.hardShortfall>0)deficits.push('Ro‘zg‘or uchun qat’iy belgilangan limitlar ajratilgan puldan '+fmt(plan.hardShortfall)+' ortiq. Moslashuvchan limitlar 0 ga kamaytirildi. Qat’iy reja avtomatik kamaytirilmaydi.');
+ if(plan.leisureShortfall>0)deficits.push('Dam olishning qat’iy limiti O‘yin-kulgi mablag‘idan '+fmt(plan.leisureShortfall)+' ortiq.');
+ warn.classList.toggle('hidden',!deficits.length);
+ warn.textContent=deficits.join(' ');
+ for(const item of F.summary(w,month()).budgets.filter(item=>item.mode!=='none')){
+  const line=document.createElement('div');line.className='line row split';
+  const label=document.createElement('span');label.textContent=item.category;
+  const value=document.createElement('strong');value.textContent=fmt(item.limit)+(item.mode==='fixed'?' · Qat’iy':' · Taxminiy');
+  line.append(label,value);targets.append(line);
+ }
+ if(!targets.children.length){const p=document.createElement('p');p.className='hint';p.textContent='Kategoriya bo‘yicha reja yo‘q.';targets.append(p);}
+}
 function renderBudgets(){
  const w=active();if(!w)return;
  const target=$('budget-list');target.replaceChildren();
@@ -58,14 +90,38 @@ function renderBudgets(){
   const line=document.createElement('div');line.className='line';
   const head=document.createElement('div');head.className='row split';
   const name=document.createElement('strong');name.textContent=item.category;head.append(name);
-  const used=document.createElement('span');used.className='small';used.textContent=fmt(item.spent)+(item.limit?' / '+fmt(item.limit):' · limit belgilanmagan');head.append(used);line.append(head);
+  const used=document.createElement('span');used.className='small';
+  const status=item.mode==='auto'?' · taxminiy':item.mode==='fixed'?' · qat’iy':' · limit yo‘q';
+  used.textContent=fmt(item.spent)+(item.limit?' / '+fmt(item.limit):'')+status;
+  head.append(used);line.append(head);
   const bar=document.createElement('div');bar.className='bar';bar.style.margin='8px 0';
-  const fill=document.createElement('div');fill.className='fill';fill.style.width=item.limit?Math.min(100,item.spent/item.limit*100)+'%':'0%';if(item.limit&&item.spent>=item.limit)fill.style.background='#c54b3e';bar.append(fill);line.append(bar);
+  const fill=document.createElement('div');fill.className='fill';
+  fill.style.width=item.limit?Math.min(100,item.spent/item.limit*100)+'%':'0%';
+  if(item.limit&&item.spent>=item.limit)fill.style.background='#c54b3e';
+  bar.append(fill);line.append(bar);
   const row=document.createElement('div');row.className='row';
-  const input=document.createElement('input');input.type='number';input.inputMode='numeric';input.min='0';input.step='1';input.max='1000000000000';input.value=item.limit||0;input.setAttribute('aria-label',item.category+' limiti');input.style.maxWidth='180px';
-  const button=document.createElement('button');button.type='button';button.className='alt';button.textContent='Limitni saqlash';
-  button.addEventListener('click',()=>{try{F.setBudget(w,month(),item.category,Number(input.value));if(commit()){renderBudgets();notice('Limit saqlandi ✓');}}catch(e){notice(e.message);}});
-  row.append(input,button);line.append(row);target.append(line);
+  const input=document.createElement('input');
+  input.type='number';input.inputMode='numeric';input.min='0';input.step='1';input.max='1000000000000';
+  input.value=item.mode==='auto'?'':item.limit||0;input.placeholder=String(item.limit||0);
+  input.setAttribute('aria-label',item.category+' qat’iy limiti');input.style.maxWidth='165px';
+  const button=document.createElement('button');button.type='button';button.className='alt';button.textContent='Qat’iy saqlash';
+  button.addEventListener('click',()=>safeAction(()=>{
+   if(input.value==='')throw Error('Qat’iy limit uchun aniq summa kiriting. Taxminiyga qaytish uchun “Avtomatik”ni bosing.');
+   const n=Number(input.value);
+   if(n===0)throw Error('0 qat’iy limit emas. “Avtomatik” tugmasini bosing.');
+   F.setBudget(w,month(),item.category,n);
+   if(commit()){render();notice('Qat’iy limit saqlandi ✓');}
+  }));
+  row.append(input,button);
+  if(item.mode==='fixed'){
+   const reset=document.createElement('button');reset.type='button';reset.className='alt';reset.textContent='Avtomatik';
+   reset.addEventListener('click',()=>safeAction(()=>{
+    F.setBudget(w,month(),item.category,0);
+    if(commit()){render();notice('Moslashuvchan limitga qaytarildi');}
+   }));
+   row.append(reset);
+  }
+  line.append(row);target.append(line);
  }
 }
 function renderReport(){
@@ -121,11 +177,11 @@ function updateQuickPreview(){
    +(category==='Boshqa'?' · Kalit so‘zni Sozlamalarga qo‘shishingiz mumkin.':'');
 }
 
-function render(){renderWorkspaces();if(!active())return;categoryOptions();renderTransactions();renderBudgets();renderReport();renderKeywordList();updateQuickPreview();}
+function render(){renderWorkspaces();if(!active())return;categoryOptions();renderTransactions();renderBudgets();renderReport();renderAllocation();renderKeywordList();updateQuickPreview();}
 function setView(next){
  view=next;
  document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===next));
- for(const name of ['records','budgets','report','settings'])$('view-'+name).classList.toggle('hidden',name!==next);
+ for(const name of ['records','allocation','budgets','report','settings'])$('view-'+name).classList.toggle('hidden',name!==next);
 }
 function resetForm(){
  editing=null;$('entry-form').reset();$('kind').value='expense';$('date').value=F.today();
@@ -155,7 +211,7 @@ $('quick-form').addEventListener('submit',e=>{e.preventDefault();safeAction(()=>
  const w=active();const parsed=F.parseFast($('quick-text').value);
  if(!parsed)throw Error('Misol: 25 ming taksi, tushlik 35000 yoki +3 mln oylik');
  const result=F.addTransaction(w,{...parsed,date:F.today()});
- if(commit()){$('quick-text').value='';render();notice('Yozuv saqlandi ✓ '+result.tx.category+' • '+fmt(result.tx.amount)+' '+(result.alert||''));}
+ if(commit()){$('quick-text').value='';render();notice(result.tx.kind==='income'&&result.tx.category==='Maosh'&&w.kind==='personal'?'Oylik saqlandi va 5 reja bo‘limiga avtomatik ajratildi ✓':('Yozuv saqlandi ✓ '+result.tx.category+' • '+fmt(result.tx.amount)+' '+(result.alert||'')));}
 });});
 $('entry-form').addEventListener('submit',e=>{e.preventDefault();safeAction(()=>{
  const w=active();const values={kind:$('kind').value,date:$('date').value,amount:Number($('amount').value),category:$('category').value,note:$('note').value};
