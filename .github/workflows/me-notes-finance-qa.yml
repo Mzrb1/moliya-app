@@ -1,0 +1,28 @@
+name: ME Notes Finance QA
+on:
+  push:
+    branches:
+      - feature/me-notes-finance-20261113
+  pull_request:
+    branches:
+      - me-notes-sahifalab-diary
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  finance-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax test
+        run: |
+          node --check me-notes-sahifalab/finance-core.js
+          node --check me-notes-sahifalab/finance-ui.js
+      - name: Accounting rules test
+        run: node --test tests/finance-core.test.cjs
+      - name: HTML integration smoke
+        run: |
+          node -e "const fs=require('fs');const html=fs.readFileSync('me-notes-sahifalab/finance.html','utf8');for (const ref of ['finance-core.js','finance-ui.js','workspace','quick-form','budget-list','report-categories']){if(!html.includes(ref))throw Error('Missing '+ref)}"
