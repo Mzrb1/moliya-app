@@ -8,6 +8,7 @@ const cacheUid=String(tg?.initDataUnsafe?.user?.id||'');
 const CACHE_KEY='me_notes_unified_cache_'+cacheUid,QUEUE_KEY='me_notes_unified_queue_'+cacheUid;
 const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),views:'home',base:{},queue:[],online:false,storageOK:true,busy:false};
 let legacyBackup=null;
+let editingId=null;
 function el(tag,cls,text){const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x;}
 function alertMessage(text,ok=false){
  const zone=$('notices');zone.replaceChildren();
@@ -38,6 +39,8 @@ function compute(){
  const snapshot=cached()||{transactions:[],budgets:{}};
  const items=(snapshot.transactions||[]).map(t=>({...t}));
  const budgets={...(snapshot.budgets||{})};
+ const prefs={categories:structuredClone(snapshot.category_options||F.BASE[w.kind]),
+  keywords:structuredClone(snapshot.keywords||{income:{},expense:{}})};
  for(const op of state.queue){
   if(op.workspace_id!==w.id)continue;
   if(op.action==='add'||op.action==='add_many'){
@@ -46,13 +49,28 @@ function compute(){
   }else if(op.action==='delete'){
    const pos=items.findIndex(t=>t.id===op.transaction_id);
    if(pos>=0)items.splice(pos,1);
+  }else if(op.action==='edit'){
+   const index=items.findIndex(t=>t.id===op.transaction_id);
+   if(index>=0){items[index]={...items[index],...op.entry};
+    if(items[index].date.slice(0,7)!==state.month)items.splice(index,1);}
   }else if(op.action==='budget'&&op.month===state.month){
    if(Number(op.limit)===0)delete budgets[op.category];else budgets[op.category]=Number(op.limit);
+  }else if(op.action==='category_add'){
+   if(prefs.categories[op.kind]&&!prefs.categories[op.kind].includes(op.name))prefs.categories[op.kind].push(op.name);
+  }else if(op.action==='category_delete'){
+   if(prefs.categories[op.kind])prefs.categories[op.kind]=prefs.categories[op.kind].filter(x=>x!==op.name);
+  }else if(op.action==='keyword_add'){
+   const lst=(prefs.keywords[op.kind]??={})[op.category]??=[];
+   if(!lst.includes(op.word))lst.push(op.word);
+   prefs.keywords[op.kind][op.category]=lst;
+  }else if(op.action==='keyword_delete'){
+   const lst=prefs.keywords[op.kind]?.[op.category];
+   if(lst)prefs.keywords[op.kind][op.category]=lst.filter(x=>x!==op.word);
   }
  }
- const shadow={kind:w.kind,categories:F.BASE[w.kind],transactions:items,budgets:{[state.month]:budgets}};
+ const shadow={kind:w.kind,categories:prefs.categories,keywords:prefs.keywords,transactions:items,budgets:{[state.month]:budgets}};
  const summary=F.summary(shadow,state.month);
- return {items,summary,plan:F.salaryAllocation(shadow,state.month),w};
+ return {items,summary,plan:F.salaryAllocation(shadow,state.month),w,prefs};
 }
 function noteStatus(text){
  $('sync-status').textContent=text||((state.online?'🟢 Telegram bilan ulangan':'🟠 Offline / ulanmagan')+
@@ -81,7 +99,9 @@ async function fetchWorkspaces(){
 async function fetchLedger(){
  if(!current())return;
  const data=await request('/ledger?workspace='+encodeURIComponent(state.active)+'&month='+encodeURIComponent(state.month));
- state.base[key()]={transactions:data.transactions,budgets:data.budgets};
+ state.base[key()]={transactions:data.transactions,budgets:data.budgets,
+  category_options:data.category_options||F.BASE[current().kind],
+  keywords:data.keywords||{income:{},expense:{}}};
  save();
 }
 async function pull(){
@@ -139,7 +159,7 @@ async function flush(){
 }
 function chooseView(name){
  state.views=name;
- for(const view of ['home','records','budget','settings'])$('view-'+view).classList.toggle('hidden',view!==name);
+ for(const view of ['home','records','budget','report','settings'])$('view-'+view).classList.toggle('hidden',view!==name);
  document.querySelectorAll('.bottom [data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===name));
  window.scrollTo?.({top:0,behavior:'smooth'});
 }
@@ -161,12 +181,16 @@ function displayRows(target,items,limit=100){
   const end=el('div');end.style.textAlign='right';
   end.append(el('div','strong '+(t.kind==='income'?'green':'red'),sign+money(t.amount)));
   if(target==='records'&&!t.id.startsWith('pending:')){
-   const button=el('button','btn warning','O‘chirish');button.style.cssText='font-size:11px;padding:5px 8px;min-height:30px;margin-top:5px';
+   const edit=el('button','btn alt','Tahrirlash');
+   edit.type='button';edit.style.cssText='font-size:11px;padding:5px 8px;min-height:30px;margin-top:5px';
+   edit.onclick=()=>openEdit(t);
+   const button=el('button','btn warning','O‘chirish');
+   button.style.cssText='font-size:11px;padding:5px 8px;min-height:30px;margin:5px 0 0 4px';
    button.type='button';
    button.onclick=()=>{
-    if(confirm('Shu xarajatni o‘chirasizmi?')){try{enqueue({action:'delete',transaction_id:t.id});}catch(e){alertMessage(e.message);}}
+    if(confirm('Shu yozuvni o‘chirasizmi?')){try{enqueue({action:'delete',transaction_id:t.id});}catch(e){alertMessage(e.message);}}
    };
-   end.append(button);
+   end.append(edit,button);
   }
   row.append(info,end);dest.append(row);
  }
@@ -205,6 +229,80 @@ function renderBudgets(data){
   block.append(actions);dest.append(block);
  }
 }
+function fillCategory(id,kind,selected){
+ const d=compute();
+ const list=d?.prefs?.categories?.[kind]||F.BASE[current()?.kind||'personal'][kind]||[];
+ const select=$(id),value=selected??select.value;
+ select.replaceChildren(...list.map(cat=>{const opt=el('option');opt.value=cat;opt.textContent=cat;return opt;}));
+ select.value=list.includes(value)?value:(list.includes('Boshqa')?'Boshqa':list[0]||'');
+}
+function openEdit(tx){
+ editingId=tx.id;
+ $('edit-kind').value=tx.kind;
+ $('edit-date').value=tx.date;
+ $('edit-amount').value=String(tx.amount);
+ $('edit-note').value=tx.note;
+ fillCategory('edit-category',tx.kind,tx.category);
+ $('edit-card').classList.remove('hidden');
+ chooseView('records');
+ $('edit-card').scrollIntoView?.({behavior:'smooth'});
+}
+function closeEdit(){
+ editingId=null;
+ $('edit-card').classList.add('hidden');
+}
+function renderReport(data){
+ $('report-income').textContent=money(data.summary.income);
+ $('report-expense').textContent=money(data.summary.expense);
+ $('report-net').textContent=money(data.summary.net);
+ const host=$('report-categories');host.replaceChildren();
+ const sums=new Map();
+ for(const tx of data.items){
+  if(tx.kind==='expense')sums.set(tx.category,(sums.get(tx.category)||0)+tx.amount);
+ }
+ const entries=[...sums].sort((a,b)=>b[1]-a[1]);
+ if(!entries.length){host.append(el('p','empty','Bu oyda hali xarajat yo‘q.'));}
+ for(const [category,value] of entries){
+  const ratio=data.summary.expense?Math.round(value/data.summary.expense*100):0;
+  const block=el('div','line');block.append(line(category,money(value),ratio+'% · jami chiqimdagi ulushi'));
+  const bar=el('div','bar'),fill=el('div','bar-fill');fill.style.width=ratio+'%';bar.append(fill);block.append(bar);host.append(block);
+ }
+ $('report-sync').textContent=state.queue.length?
+  state.queue.length+' ta operatsiya hali telefon navbatida. Sinxronlangandan keyin chat hisobotiga ham tushadi.':
+  state.online?'Yozuvlar chat bilan bitta Turso bazasida saqlanadi.':'Hozir eski saqlangan natija; internet bilan sinxronlashni tekshiring.';
+}
+function renderSettings(data){
+ const opts=data.prefs.categories,selector=$('settings-kind'),kind=selector.value||'expense',sel=$('settings-category'),wanted=sel.value;
+ sel.replaceChildren(...opts[kind].map(x=>{const o=el('option');o.value=x;o.textContent=x;return o;}));
+ if(opts[kind].includes(wanted))sel.value=wanted;
+ const selected=sel.value,aliases=data.prefs.keywords[kind]?.[selected]||[];
+ const list=$('category-list');list.replaceChildren();
+ const customs=opts[kind].filter(x=>!F.BASE[data.w.kind][kind].includes(x));
+ if(!customs.length)list.append(el('p','tiny','Qo‘shimcha kategoriya hali yaratilmagan.'));
+ for(const c of customs){
+  const container=line(c,'','Qo‘shimcha kategoriya');
+  const button=el('button','btn warning','O‘chirish');button.type='button';
+  button.style.cssText='min-height:30px;padding:5px 8px;font-size:11px';
+  button.onclick=()=>{
+   if(!confirm('"'+c+'" kategoriyasini o‘chirasizmi? Unda yozuv yoki limit bo‘lsa server rad etadi.'))return;
+   try{enqueue({action:'category_delete',kind,name:c});}catch(e){alertMessage(e.message);}
+  };
+  container.append(button);list.append(container);
+ }
+ const host=$('keyword-list');host.replaceChildren();
+ if(!aliases.length)host.append(el('p','tiny','Maxsus kalit so‘zlar qo‘shilmagan.'));
+ for(const word of aliases){
+  const row=el('div','row between line'),name=el('span','strong',word);
+  const remove=el('button','btn alt','Olib tashlash');remove.type='button';
+  remove.style.cssText='font-size:11px;padding:5px 8px;min-height:30px';
+  remove.onclick=()=>{
+   if(!confirm('“'+word+'” kalit so‘zini olib tashlaysizmi?'))return;
+   try{enqueue({action:'keyword_delete',kind,category:selected,word});}catch(e){alertMessage(e.message);}
+  };
+  row.append(name,remove);host.append(row);
+ }
+}
+
 function render(){
  const w=current(),data=compute();
  $('app').classList.toggle('hidden',!w);
@@ -220,7 +318,11 @@ function render(){
  $('expense').textContent=money(data.summary.expense);
  displayRows('recent',data.items,3);
  displayRows('records',data.items,150);
- renderPlan(data);renderBudgets(data);noteStatus();
+ renderPlan(data);renderBudgets(data);
+ renderReport(data);renderSettings(data);
+ fillCategory('manual-category',$('manual-kind').value);
+ if(editingId)fillCategory('edit-category',$('edit-kind').value);
+ noteStatus();
 }
 function parseInput(raw){
  const list=F.parseList(raw);
@@ -234,7 +336,9 @@ function parseInput(raw){
   items=[one];
  }
  const w=current();
- return items.map(x=>({kind:x.kind,amount:x.amount,date:F.today(),note:x.note,category:F.categoryFor({kind:w.kind,categories:F.BASE[w.kind]},x.kind,x.note)}));
+ const prefs=compute()?.prefs||{categories:F.BASE[w.kind],keywords:{income:{},expense:{}}};
+ return items.map(x=>({kind:x.kind,amount:x.amount,date:F.today(),note:x.note,
+  category:F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},x.kind,x.note)}));
 }
 function showPreview(){
  const raw=$('quick-text').value;
@@ -321,6 +425,66 @@ function setup(){
    enqueue(parts.length===1?{action:'add',entry:parts[0]}:{action:'add_many',entries:parts});
    $('quick-text').value='';showPreview();
    alertMessage(parts.length+' ta yozuv telefonda saqlandi, serverga yuboriladi.',true);
+  }catch(err){alertMessage(err.message);}
+ };
+ $('manual-date').value=F.today();
+ $('manual-toggle').onclick=()=>{
+  const opened=$('manual-form').classList.toggle('hidden')===false;
+  $('manual-toggle').textContent=opened?'Yopish':'Ochish';
+  $('manual-toggle').setAttribute('aria-expanded',opened?'true':'false');
+ };
+ $('manual-kind').onchange=()=>fillCategory('manual-category',$('manual-kind').value);
+ $('manual-form').onsubmit=e=>{
+  e.preventDefault();
+  try{
+   const kind=$('manual-kind').value,amount=F.amount(Number($('manual-amount').value)),
+    date=$('manual-date').value,category=$('manual-category').value,note=$('manual-note').value.trim();
+   if(!F.validDay(date)||!note)throw Error('Sana va izohni tekshiring');
+   enqueue({action:'add',entry:{kind,amount,date,category,note}});
+   $('manual-form').reset();$('manual-date').value=F.today();
+   fillCategory('manual-category','expense');
+   alertMessage('Yozuv navbatga qo‘shildi. Telegram bilan sinxronlanadi.',true);
+  }catch(err){alertMessage(err.message);}
+ };
+ $('edit-kind').onchange=()=>fillCategory('edit-category',$('edit-kind').value);
+ $('edit-cancel').onclick=closeEdit;
+ $('edit-form').onsubmit=e=>{
+  e.preventDefault();
+  try{
+   if(!editingId)throw Error('Tahrir uchun yozuv tanlanmagan');
+   const entry={kind:$('edit-kind').value,date:$('edit-date').value,
+    category:$('edit-category').value,amount:F.amount(Number($('edit-amount').value)),
+    note:$('edit-note').value.trim()};
+   if(!F.validDay(entry.date)||!entry.note)throw Error('Sana yoki izoh noto‘g‘ri');
+   enqueue({action:'edit',transaction_id:editingId,entry});
+   closeEdit();alertMessage('O‘zgarish saqlash navbatiga qo‘shildi.',true);
+  }catch(err){alertMessage(err.message);}
+ };
+ $('settings-kind').onchange=()=>{const d=compute();if(d)renderSettings(d);};
+ $('settings-category').onchange=()=>{const d=compute();if(d)renderSettings(d);};
+ $('category-form').onsubmit=e=>{
+  e.preventDefault();
+  try{
+   const d=compute(),kind=$('settings-kind').value,name=$('category-name').value.trim();
+   if(!d)throw Error('Hisob yuklanmagan');
+   const temp={categories:structuredClone(d.prefs.categories)};
+   F.addCategory(temp,kind,name);
+   enqueue({action:'category_add',kind,name});
+   $('category-name').value='';
+   alertMessage('Yangi kategoriya qo‘shish navbatida.',true);
+  }catch(err){alertMessage(err.message);}
+ };
+ $('keyword-form').onsubmit=e=>{
+  e.preventDefault();
+  try{
+   const d=compute(),kind=$('settings-kind').value,category=$('settings-category').value,
+    word=$('keyword-word').value.trim();
+   if(!d)throw Error('Hisob yuklanmagan');
+   const temp={categories:structuredClone(d.prefs.categories),keywords:structuredClone(d.prefs.keywords)};
+   const normalized=F.addKeyword(temp,kind,category,word);
+   enqueue({action:'keyword_add',kind,category,word:normalized});
+   $('keyword-word').value='';
+   alertMessage('Kalit so‘z qo‘shish navbatida.',true);
   }catch(err){alertMessage(err.message);}
  };
  $('new-account').onclick=()=>{$('account-form').classList.toggle('hidden');};

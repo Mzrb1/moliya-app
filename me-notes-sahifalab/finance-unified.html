@@ -33,11 +33,49 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 <div class="card"><h2>⚡ Bir xabarda yozing</h2><p class="tiny">Bitta xarajat yoki har qatorga bittadan ro‘yxat:</p>
 <form id="quick-form"><textarea id="quick-text" maxlength="3000" placeholder="25 ming taksi&#10;Tushlik 35000&#10;+3 mln oylik" required></textarea>
 <div id="quick-preview" class="tiny gap-top"></div><button class="btn gap-top" type="submit">Saqlash</button></form></div>
+<div class="card"><div class="headline"><h2>✍️ Batafsil kiritish</h2><button id="manual-toggle" type="button" class="btn alt" aria-expanded="false" aria-controls="manual-form">Ochish</button></div>
+<form id="manual-form" class="hidden">
+<div class="field-grid"><div><label for="manual-kind">Turi</label><select id="manual-kind"><option value="expense">Xarajat</option><option value="income">Daromad</option></select></div>
+<div><label for="manual-date">Sana</label><input id="manual-date" type="date" required/></div></div>
+<div class="field-grid"><div><label for="manual-amount">Summa (so‘m)</label><input id="manual-amount" type="number" inputmode="numeric" min="1" max="1000000000000" step="1" required/></div>
+<div><label for="manual-category">Kategoriya</label><select id="manual-category" required></select></div></div>
+<label for="manual-note">Izoh</label><input id="manual-note" type="text" maxlength="160" placeholder="Masalan: bozor" required/>
+<button type="submit" class="btn gap-top">Yozuvni saqlash</button>
+</form></div>
 <div class="card"><div class="headline"><h2>So‘nggi yozuvlar</h2><button type="button" data-view="records" class="btn alt">Hammasi</button></div><div id="recent"></div></div>
 </section>
-<section id="view-records" class="hidden"><div class="card"><h2>🧾 Yozuvlar</h2><p class="tiny">Chatdan va Mini App’dan kelgan yozuvlar bitta hisobda. O‘chirish tasdiq bilan amalga oshadi.</p><div id="records"></div></div></section>
-<section id="view-budget" class="hidden"><div class="card"><h2>🧮 Oylik taqsimot</h2><p id="allocation-intro" class="tiny"></p><div id="allocation"></div></div><div class="card"><h2>🎯 Kategoriya limitlari</h2><p class="tiny">Taqsimotdan hisoblangan limitlar taxminiy. Tasdiqlangan limitlar qat’iy saqlanadi. Mavjud pul yetmasa ogohlantirish ko‘rsatiladi.</p><div id="limits"></div></div></section>
-<section id="view-settings" class="hidden"><div class="card"><h2>⚙️ Sozlamalar va zaxira</h2><p class="tiny">Yangi yozuvlar Telegram chat bilan Turso’da sinxronlanadi. Internet uzilganda kiritilgan yozuvlar shu telefonda navbatda saqlanib, ulanish tiklanganda yuboriladi.</p>
+<section id="view-records" class="hidden">
+<div id="edit-card" class="card hidden">
+<h2>✏️ Yozuvni tahrirlash</h2><p class="tiny">Saqlasangiz yangi summa va kategoriya chatdagi umumiy hisobotga ham ta’sir qiladi.</p>
+<form id="edit-form">
+<div class="field-grid"><div><label for="edit-kind">Turi</label><select id="edit-kind"><option value="expense">Xarajat</option><option value="income">Daromad</option></select></div>
+<div><label for="edit-date">Sana</label><input id="edit-date" type="date" required/></div></div>
+<div class="field-grid"><div><label for="edit-amount">Summa (so‘m)</label><input id="edit-amount" type="number" min="1" max="1000000000000" step="1" required/></div>
+<div><label for="edit-category">Kategoriya</label><select id="edit-category" required></select></div></div>
+<label for="edit-note">Izoh</label><input id="edit-note" maxlength="160" required/>
+<div class="flex gap-top"><button type="submit" class="btn">O‘zgarishni saqlash</button><button type="button" id="edit-cancel" class="btn alt">Bekor</button></div></form></div>
+<div class="card"><h2>🧾 Yozuvlar</h2><p class="tiny">Telegram chat va Mini App bitta bazada. Har bir yozuvni tahrirlash yoki o‘chirish mumkin.</p><div id="records"></div></div></section>
+<section id="view-report" class="hidden">
+<div class="card"><h2>📊 Oylik hisobot</h2>
+<div class="metrics"><div class="metric"><div class="tiny">Daromad</div><strong id="report-income" class="number green">—</strong></div><div class="metric"><div class="tiny">Xarajat</div><strong id="report-expense" class="number red">—</strong></div></div>
+<div class="gap-top"><span class="tiny">Hisobiy farq (bank balansi emas)</span><div class="value" id="report-net">—</div></div></div>
+<div class="card"><h2>Kategoriyalar kesimida</h2><div id="report-categories"></div></div>
+<div class="card"><h2>Sinxronlash holati</h2><p id="report-sync" class="tiny"></p></div>
+</section><section id="view-budget" class="hidden"><div class="card"><h2>🧮 Oylik taqsimot</h2><p id="allocation-intro" class="tiny"></p><div id="allocation"></div></div><div class="card"><h2>🎯 Kategoriya limitlari</h2><p class="tiny">Taqsimotdan hisoblangan limitlar taxminiy. Tasdiqlangan limitlar qat’iy saqlanadi. Mavjud pul yetmasa ogohlantirish ko‘rsatiladi.</p><div id="limits"></div></div></section>
+<section id="view-settings" class="hidden">
+<div class="card"><h2>🏷 Kategoriyalar va kalit so‘zlar</h2>
+<p class="tiny">Kalit so‘zlar bo‘yicha avtomatik tasniflash chat va Mini App’da bir xil ishlaydi. Eski yozuvlar avtomatik o‘zgartirilmaydi.</p>
+<div class="field-grid"><div><label for="settings-kind">Kategoriya turi</label><select id="settings-kind"><option value="expense">Xarajat</option><option value="income">Daromad</option></select></div>
+<div><label for="settings-category">Kategoriya</label><select id="settings-category"></select></div></div>
+<div id="category-list" class="gap-top"></div>
+<form id="category-form" class="gap-top">
+<label for="category-name">Yangi kategoriya</label><div class="row"><input id="category-name" maxlength="80" placeholder="Masalan: Uy hayvonlari" required/><button class="btn alt" type="submit">Qo‘shish</button></div>
+</form>
+<form id="keyword-form" class="gap-top"><label for="keyword-word">Tanlangan kategoriyaga kalit so‘z</label>
+<div class="row"><input id="keyword-word" maxlength="48" placeholder="Masalan: pampers" required/><button class="btn alt" type="submit">Qo‘shish</button></div></form>
+<h3 class="gap-top">Tanlangan kategoriya kalit so‘zlari</h3><div id="keyword-list"></div>
+</div>
+<div class="card"><h2>⚙️ Sozlamalar va zaxira</h2><p class="tiny">Yangi yozuvlar Telegram chat bilan Turso’da sinxronlanadi. Internet uzilganda kiritilgan yozuvlar shu telefonda navbatda saqlanib, ulanish tiklanganda yuboriladi.</p>
 <div id="queue-info" class="notice"></div><div class="flex"><button type="button" id="sync-now" class="btn alt">Sinxronlash</button><button type="button" id="export-data" class="btn alt">Joriy oy JSON</button></div></div>
 <div class="card"><h2>Eski Mini App ma’lumotlarini ko‘chirish</h2>
 <p class="tiny">Avval eski sahifadagi JSON zaxirani oling. Keyin qaysi eski hisob yozuvlari yangi hisobga qo‘shilishini ko‘rib, <strong>o‘zingiz tasdiqlaysiz</strong>. Oldingi yozuvlar o‘chirilmaydi. Chatga ilgari kiritilgan bir xil xarajatlarni import qilsangiz, jami ikki marta chiqishi mumkin.</p>
@@ -50,5 +88,5 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 <button type="button" id="confirm-import" class="btn gap-top">Ko‘chirishni tasdiqlash</button></div></div><div class="card"><h2>📚 Darslar va kundalik</h2><p class="tiny">Sahifalab 1–2-darslari va Mening kundaligim alohida saqlanadi.</p><a class="btn alt" href="index.html" style="display:inline-block">Kundalikni ochish</a></div></section>
 </div>
 </main>
-<nav class="bottom" aria-label="Asosiy menyu"><button type="button" data-view="home" class="active"><span class="glyph">🏠</span>Asosiy</button><button type="button" data-view="records"><span class="glyph">🧾</span>Yozuvlar</button><button type="button" data-view="budget"><span class="glyph">🎯</span>Byudjet</button><a href="index.html"><span class="glyph">📖</span>Darslar</a></nav>
+<nav class="bottom" aria-label="Asosiy menyu"><button type="button" data-view="home" class="active"><span class="glyph">🏠</span>Asosiy</button><button type="button" data-view="records"><span class="glyph">🧾</span>Yozuvlar</button><button type="button" data-view="budget"><span class="glyph">🎯</span>Byudjet</button><button type="button" data-view="report"><span class="glyph">📊</span>Hisobot</button></nav>
 <script src="finance-core.js"></script><script src="finance-unified.js"></script></body></html>
