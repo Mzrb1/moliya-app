@@ -1,0 +1,45 @@
+name: ME Notes Live API Smoke (QA only)
+on:
+  push:
+    branches:
+      - qa/me-notes-api-live-20261113
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-endpoints:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate live health, API preflight, auth and webhook isolation
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          const base='https://me-notes-chat-test.onrender.com';
+          const origin='https://me-notes-sahifalab.onrender.com';
+          async function call(path,opts={}){
+            let last;
+            for(let i=0;i<4;i++){
+              try{return await fetch(base+path,{...opts,signal:AbortSignal.timeout(20000)});}
+              catch(e){last=e;await new Promise(r=>setTimeout(r,2500));}
+            }
+            throw last;
+          }
+          (async()=>{
+            const health=await call('/health');
+            assert.equal(health.status,200,'Health must succeed');
+            const cors=await call('/api/v1/workspaces',{method:'OPTIONS',headers:{
+              Origin:origin,'Access-Control-Request-Method':'GET','Access-Control-Request-Headers':'X-Telegram-Init-Data'}});
+            assert.equal(cors.status,204,'Preflight must reach finance API, not 404');
+            assert.equal(cors.headers.get('access-control-allow-origin'),origin,'CORS allow-origin');
+            const unauth=await call('/api/v1/workspaces',{headers:{Origin:origin}});
+            assert.equal(unauth.status,401,'Unauthenticated API must return 401, not 404');
+            const invalidHook=await call('/telegram/webhook',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+            assert.equal(invalidHook.status,403,'Webhook without secret should be denied');
+            console.log(JSON.stringify({
+              health:health.status,api_preflight:cors.status,api_auth_check:unauth.status,webhook_rejected:invalidHook.status
+            }));
+          })().catch(e=>{console.error(e.stack||e);process.exitCode=1;});
+          NODE
