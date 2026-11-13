@@ -95,8 +95,8 @@ function resetForm(){
 function safeAction(action){try{if(blocked)throw Error('Ma’lumot xotirasi ishlamayapti');action();}catch(e){notice(e.message||'Xatolik yuz berdi');}}
 document.querySelectorAll('[data-new]').forEach(btn=>btn.addEventListener('click',()=>safeAction(()=>{
  const kind=btn.dataset.new;const title=F.KINDS[kind];
- const name=prompt('Hisob nomi:',title);if(name===null)return;
- F.create(state,kind,name);if(commit()){picker(false);resetForm();render();setView('records');notice('Hisob ochildi: '+(active()?.name||title));}
+ const name=$('workspace-name').value.trim()||title;
+ F.create(state,kind,name);if(commit()){$('workspace-name').value='';picker(false);resetForm();render();setView('records');notice('Hisob ochildi: '+(active()?.name||title));}
 })));
 $('new-workspace').addEventListener('click',()=>picker(!$('pick').classList.contains('hidden')));
 $('workspace').addEventListener('change',()=>safeAction(()=>{F.setActive(state,$('workspace').value);if(commit()){resetForm();render();setView('records');notice('Hisob almashtirildi');}}));
