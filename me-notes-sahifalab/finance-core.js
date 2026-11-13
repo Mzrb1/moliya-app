@@ -46,7 +46,7 @@ function parseFast(raw){
    note=match[1];kind=match[2]==='+'?'income':'expense';number=match[3];scale=match[4];
  }
  note=cleanText(note,160);
- if(!note||/^[\d.,+\s-]+$/.test(note))return null;
+ if(!note||/^[\d.,+\s-]+$/.test(note)||/^(ming|mln|million|millionta|k|so‘m|soʻm|so'm|som)$/i.test(note))return null;
  const normalized=number.replace(/(?<=\d)[ .](?=\d{3}(?:\D|$))/g,'');
  let n=Number(normalized.replace(',','.'));
  if(!Number.isFinite(n)||n<=0)return null;
