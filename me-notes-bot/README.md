@@ -24,6 +24,28 @@ Server /health orqali tekshiriladi. AUTO_SET_WEBHOOK=true bo‘lsa, sog‘lom xi
 ESLATMA: mavjud Telegram Serverless yoki boshqa webhook yangi webhook
 o‘rnatilganda almashtiriladi. Ulashdan oldin tekshiring.
 
+## Bir xabarda xarajatlar ro‘yxati
+
+Telegram chatida **har bir xarajatni alohida qatordan** yozing:
+
+```text
+Tushlik 98000
+18ming yo'lga
+- 40 ming doriga
+```
+
+Bot ularni ajratadi, mos kategoriyaga yo‘naltiradi va bitta umumiy tasdiq yuboradi.
+Sarlavha (`Xarajatlar:`), raqamlangan (`1.`, `2)`) yoki `-`, `•`
+bilan belgilangan ro‘yxat ham ishlaydi. **Eng ko‘pi 20 qator**.
+Bitta qatorda summa yoki izoh noto‘g‘ri bo‘lsa, **hech biri saqlanmaydi**:
+qaysi qator xato ekani ko‘rsatiladi.
+
+Ro‘yxatdagi yozuvlar bitta bazaviy tranzaksiyada saqlanadi va Telegram
+bir xabarni qayta yuborsa, qayta hisoblanmaydi. `/bekor` bu safar
+**oxirgi butun ro‘yxatni** bekor qiladi. Avvalgi bir qatorli xabarlar
+avvalgidek ishlaydi. Mini App ro‘yxat kiritish hali alohida;
+Telegram chat bazasi bilan Mini App brauzer xotirasi sinxronlashmagan.
+
 ## Buyruqlar
 - /start: shaxsiy hisob yaratish va yordam
 - /hisob: shaxsiy/oilaviy/biznes hisobni tanlash yoki qo‘shish
