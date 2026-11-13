@@ -32,7 +32,8 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 </div>
 <div class="card"><h2>⚡ Bir xabarda yozing</h2><p class="tiny">Bitta xarajat yoki har qatorga bittadan ro‘yxat:</p>
 <form id="quick-form"><textarea id="quick-text" maxlength="3000" placeholder="25 ming taksi&#10;Tushlik 35000&#10;+3 mln oylik" required></textarea>
-<div id="quick-preview" class="tiny gap-top"></div><button class="btn gap-top" type="submit">Saqlash</button></form></div>
+<p id="quick-month-hint" class="tiny gap-top">Tezkor yozuv faqat joriy oyga kiritiladi. O‘tgan oy uchun «Batafsil kiritish»da sanani tanlang.</p>
+<div id="quick-preview" class="tiny gap-top"></div><button id="quick-save" class="btn gap-top" type="submit">Saqlash</button></form></div>
 <div class="card"><div class="headline"><h2>✍️ Batafsil kiritish</h2><button id="manual-toggle" type="button" class="btn alt" aria-expanded="false" aria-controls="manual-form">Ochish</button></div>
 <form id="manual-form" class="hidden">
 <div class="field-grid"><div><label for="manual-kind">Turi</label><select id="manual-kind"><option value="expense">Xarajat</option><option value="income">Daromad</option></select></div>
@@ -75,8 +76,20 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 <div class="row"><input id="keyword-word" maxlength="48" placeholder="Masalan: pampers" required/><button class="btn alt" type="submit">Qo‘shish</button></div></form>
 <h3 class="gap-top">Tanlangan kategoriya kalit so‘zlari</h3><div id="keyword-list"></div>
 </div>
+<div class="card" id="monthly-archive">
+<h2>🗃 Oylik arxiv</h2>
+<p class="tiny">Har bir oy Turso’da alohida saqlanadi. Tugagan oyni «Yakunlash» faqat <strong>tahrirlanmaydigan</strong> qiladi, yozuvlarni o‘chirmaydi. Keyin «Qayta ochish» mumkin. Avval oylik JSON nusxasini yuklab oling.</p>
+<div id="month-history" class="gap-top" aria-live="polite"></div>
+<p id="month-archive-status" class="tiny gap-top">Tanlangan oy: —</p>
+<div class="flex gap-top">
+<button id="archive-export" type="button" class="btn alt">Tanlangan oy JSON</button>
+<button id="archive-close" type="button" class="btn">Oyni yakunlash</button>
+<button id="archive-reopen" type="button" class="btn alt">Qayta ochish</button>
+</div>
+<p class="tiny gap-top">Joriy oyni yakunlab bo‘lmaydi. O‘tgan oylar keyingi oy hisobiga qo‘shilmaydi. JSON faylni xavfsiz joyda saqlang.</p>
+</div>
 <div class="card"><h2>⚙️ Sozlamalar va zaxira</h2><p class="tiny">Yangi yozuvlar Telegram chat bilan Turso’da sinxronlanadi. Internet uzilganda kiritilgan yozuvlar shu telefonda navbatda saqlanib, ulanish tiklanganda yuboriladi.</p>
-<div id="queue-info" class="notice"></div><div class="flex"><button type="button" id="sync-now" class="btn alt">Sinxronlash</button><button type="button" id="export-data" class="btn alt">Joriy oy JSON</button></div></div>
+<div id="queue-info" class="notice"></div><div class="flex"><button type="button" id="sync-now" class="btn alt">Sinxronlash</button><button type="button" id="export-data" class="btn alt">Tanlangan oy JSON</button></div></div>
 <div class="card"><h2>Eski Mini App ma’lumotlarini ko‘chirish</h2>
 <p class="tiny">Avval eski sahifadagi JSON zaxirani oling. Keyin qaysi eski hisob yozuvlari yangi hisobga qo‘shilishini ko‘rib, <strong>o‘zingiz tasdiqlaysiz</strong>. Oldingi yozuvlar o‘chirilmaydi. Chatga ilgari kiritilgan bir xil xarajatlarni import qilsangiz, jami ikki marta chiqishi mumkin.</p>
 <a href="finance.html" class="btn alt" style="display:inline-block">Eski Mini App / Zaxira</a>

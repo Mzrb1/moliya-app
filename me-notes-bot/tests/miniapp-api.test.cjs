@@ -226,3 +226,91 @@ test('Custom categories still honor monthly fixed limits',async()=>{
  assert.equal(ledger.categories.find(x=>x.category==='Uy hayvonlari').limit,25000);
  db.close();
 });
+
+
+test('Monthly history separates October and November for one user',async()=>{
+ const {db,api}=await freshDb();
+ await api.execute('111',{op_id:'web_months_one_00001',workspace_id:'personal-111',action:'add',entry:{kind:'income',amount:50000,date:'2026-10-31',note:'October salary',category:'Maosh'}});
+ await api.execute('111',{op_id:'web_months_two_00002',workspace_id:'personal-111',action:'add',entry:{kind:'expense',amount:8000,date:'2026-11-01',note:'taksi'}});
+ const october=await api.ledger('111','personal-111','2026-10');
+ const november=await api.ledger('111','personal-111','2026-11');
+ assert.equal(october.totals.income,50000);
+ assert.equal(october.totals.expense,0);
+ assert.equal(november.totals.income,0);
+ assert.equal(november.totals.expense,8000);
+ const months=await api.monthHistory('111','personal-111');
+ assert.equal(months.find(m=>m.month==='2026-10').count,1);
+ assert.equal(months.find(m=>m.month==='2026-11').count,1);
+ assert.ok(!((await api.monthHistory('222','personal-222')).some(m=>m.month==='2026-10')));
+ db.close();
+});
+test('Closing a past month preserves rows and makes them read-only',async()=>{
+ const {db,api}=await freshDb();
+ const wid='personal-111',month='2026-10';
+ await api.execute('111',{op_id:'web_archived_add_001',workspace_id:wid,action:'add',
+  entry:{kind:'expense',amount:55000,date:'2026-10-21',note:'bozorga'}});
+ const tx=(await api.ledger('111',wid,month)).transactions[0];
+ const archive={op_id:'web_month_close_001',workspace_id:wid,action:'month_close',month};
+ await api.execute('111',archive);
+ assert.equal((await api.execute('111',archive)).already,true);
+ const ledger=await api.ledger('111',wid,month);
+ assert.equal(ledger.totals.expense,55000);
+ assert.ok(ledger.closed_at);
+ await assert.rejects(()=>api.execute('111',{op_id:'web_archived_add_002',workspace_id:wid,action:'add',entry:{kind:'expense',amount:100,date:'2026-10-21',note:'non'}}),/arxivlangan/);
+ await assert.rejects(()=>api.execute('111',{op_id:'web_archived_edit_003',workspace_id:wid,action:'edit',transaction_id:tx.id,entry:{amount:1000}}),/arxivlangan/);
+ await assert.rejects(()=>api.execute('111',{op_id:'web_archived_del_004',workspace_id:wid,action:'delete',transaction_id:tx.id}),/arxivlangan/);
+ await assert.rejects(()=>api.execute('111',{op_id:'web_archived_budget_005',workspace_id:wid,action:'budget',month,category:'Transport',limit:200000}),/arxivlangan/);
+ const newer=await api.execute('111',{op_id:'web_new_month_ok_006',workspace_id:wid,action:'add',
+  entry:{kind:'expense',amount:7000,date:'2026-11-01',note:'taksi'}});
+ assert.equal(newer.saved,1);
+ assert.equal((await api.ledger('111',wid,'2026-11')).totals.expense,7000);
+ const backup=await api.exportMonth('111',wid,month);
+ assert.equal(backup.transactions.length,1);
+ assert.equal(backup.totals.expense,55000);
+ assert.ok(backup.closed_at);
+ db.close();
+});
+test('Reopen archived month allows editing without altering another month',async()=>{
+ const {db,api}=await freshDb();
+ const wid='personal-111';
+ await api.execute('111',{op_id:'web_reopen_close_001',workspace_id:wid,action:'month_close',month:'2026-10'});
+ assert.ok((await api.ledger('111',wid,'2026-10')).closed_at);
+ await api.execute('111',{op_id:'web_reopen_action_001',workspace_id:wid,action:'month_reopen',month:'2026-10'});
+ assert.equal((await api.ledger('111',wid,'2026-10')).closed_at,null);
+ const r=await api.execute('111',{op_id:'web_reopen_insert_001',workspace_id:wid,action:'add',
+  entry:{kind:'expense',amount:11000,date:'2026-10-02',note:'yo‘lga'}});
+ assert.equal(r.saved,1);
+ assert.equal((await api.ledger('111',wid,'2026-11')).transactions.length,0);
+ db.close();
+});
+test('Current month cannot be accidentally closed',async()=>{
+ const {db,api}=await freshDb();
+ const F=require('../../me-notes-sahifalab/finance-core.js');
+ await assert.rejects(()=>api.execute('111',{op_id:'web_close_current_001',workspace_id:'personal-111',action:'month_close',month:F.today().slice(0,7)}),/Faqat tugagan/);
+ db.close();
+});
+test('Archived month cannot be changed through old offline import',async()=>{
+ const {db,api}=await freshDb();
+ await api.execute('111',{op_id:'web_import_close_001',workspace_id:'personal-111',action:'month_close',month:'2026-10'});
+ await assert.rejects(()=>api.execute('111',{op_id:'web_import_closed_002',workspace_id:'personal-111',action:'import',source_workspace:'old_my_personal',source_kind:'personal',
+  entries:[{source_id:'old002',kind:'expense',amount:99000,date:'2026-10-10',category:'Transport',note:'taksi'}]}),/arxivlangan/);
+ assert.equal((await api.ledger('111','personal-111','2026-10')).transactions.length,0);
+ db.close();
+});
+test('An attacker cannot archive or export another user workspace',async()=>{
+ const {db,api}=await freshDb();
+ await assert.rejects(()=>api.execute('222',{op_id:'web_cross_user_close_001',workspace_id:'personal-111',action:'month_close',month:'2026-10'}));
+ await assert.rejects(()=>api.exportMonth('222','personal-111','2026-10'));
+ await assert.rejects(()=>api.monthHistory('222','personal-111'));
+ db.close();
+});
+test('Monthly cloud backup includes budgets and month metadata',async()=>{
+ const {db,api}=await freshDb();
+ await api.execute('111',{op_id:'web_export_budget_001',workspace_id:'personal-111',action:'budget',month:'2026-10',category:'Transport',limit:140000});
+ const exported=await api.exportMonth('111','personal-111','2026-10');
+ assert.equal(exported.format,'me-notes-finance-month-v1');
+ assert.equal(exported.month,'2026-10');
+ assert.equal(exported.budgets.Transport,140000);
+ assert.equal(exported.workspace.kind,'personal');
+ db.close();
+});
