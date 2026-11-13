@@ -7,9 +7,10 @@ const {validateInitData}=require('../miniapp-auth.cjs');
 const {makeFinanceApi,prepareEntries,updateId}=require('../miniapp-api.cjs');
 
 const TOKEN='123456:FAKE_TOKEN_ONLY_FOR_UNIT_TESTS';
-function makeSigned(uid=12345,authDate=Math.floor(Date.now()/1000)){
+function makeSigned(uid=12345,authDate=Math.floor(Date.now()/1000),withSignature=false){
  const user=JSON.stringify({id:uid,first_name:'Unit Test'});
  const fields=new URLSearchParams({auth_date:String(authDate),user});
+ if(withSignature)fields.set('signature','telegram-signed-data-for-test_only');
  const payload=[...fields].map(([k,v])=>k+'='+v).sort().join('\n');
  const secret=createHmac('sha256','WebAppData').update(TOKEN).digest();
  fields.set('hash',createHmac('sha256',secret).update(payload).digest('hex'));
@@ -33,6 +34,13 @@ async function freshDb(){
 }
 test('Telegram haqiqiy signed initData o‘tadi',()=>{
  assert.equal(validateInitData(makeSigned(),TOKEN).uid,'12345');
+});
+test('Modern Telegram initData with signature is accepted by bot-token HMAC',()=>{
+ assert.equal(validateInitData(makeSigned(12345,Math.floor(Date.now()/1000),true),TOKEN).uid,'12345');
+});
+test('Changing Telegram signature field invalidates HMAC',()=>{
+ const signed=makeSigned(12345,Math.floor(Date.now()/1000),true);
+ assert.throws(()=>validateInitData(signed.replace('telegram-signed-data-for-test_only','tampered-value'),TOKEN));
 });
 test('Telegram foydalanuvchi ID ni almashtirib bo‘lmaydi',()=>{
  const signed=makeSigned(),forged=signed.replace('12345','99999');
