@@ -17,6 +17,12 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 <header class="top"><div class="logo">ME</div><div class="grow"><h1 class="title">ME Notes</h1><div class="sub">Yagona moliya · Sinov</div></div><button class="header-action" type="button" id="open-settings" aria-label="Sozlamalar">⚙️</button></header>
 <div id="notices" role="status" aria-live="polite"></div><div id="sync-status" class="status">Ulanish tekshirilmoqda…</div>
 <section id="welcome" class="card hidden"><h2>Telegram ichidan oching</h2><p class="tiny">Yagona hisobga xavfsiz ulanish uchun @ME_notes_bot ga /start yozib, «Yagona moliya — Mini App» tugmasini bosing. Oddiy brauzer havolasidan Telegram identifikatsiyasi uzatilmaydi.</p><a href="https://t.me/ME_notes_bot" class="btn" style="display:inline-block">Telegram botga o‘tish</a><p class="tiny">Eski saqlangan yozuvlaringiz avvalgi sahifada qoladi: <a href="finance.html">Eski moliya sahifasi</a>.</p></section>
+<section id="connection-help" class="card hidden">
+ <h2>Hisobga ulanish</h2>
+ <p id="connection-explain" class="tiny">Telegram moliya ma’lumotlari yuklanmoqda.</p>
+ <div class="flex"><button id="retry-connect" type="button" class="btn">Qayta ulanish</button><a href="https://t.me/ME_notes_bot" class="btn alt">Botni ochish</a></div>
+ <p class="tiny gap-top">Mavjud yozuvlaringiz serverda va eski moliya sahifasida alohida saqlangan. Ilovani o‘chirib, keshni tozalashga shoshilmang.</p>
+ </section>
 <div id="app" class="hidden">
 <section class="card"><div class="field-grid"><div><label for="workspace">Hisob</label><select id="workspace"></select></div><div><label for="month">Oy</label><input id="month" type="month"/></div></div><div class="flex gap-top"><button type="button" id="new-account" class="btn alt">+ Hisob ochish</button><span class="pill" id="account-kind"></span></div><form id="account-form" class="hidden gap-top"><div class="field-grid"><div><label for="account-type">Hisob turi</label><select id="account-type"><option value="personal">Shaxsiy</option><option value="family">Oilaviy</option><option value="business">Biznes</option></select></div><div><label for="account-name">Hisob nomi</label><input id="account-name" maxlength="60" placeholder="Masalan: Oilamiz"/></div></div><button type="submit" class="btn gap-top">Hisobni ochish</button></form></section>
 <section id="view-home">

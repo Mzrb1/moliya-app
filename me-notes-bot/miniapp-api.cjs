@@ -165,7 +165,9 @@ function makeFinanceApi({db,botToken,ensure}){
   const headers=sendCors;
   if(req.method==='OPTIONS'){res.writeHead(204,headers);res.end();return true;}
   try{
-   const {uid}=validateInitData(req.headers['x-telegram-init-data'],botToken);
+   let uid;
+   try{({uid}=validateInitData(req.headers['x-telegram-init-data'],botToken));}
+   catch(e){throw forbidden('Telegram Mini App sessiyasi noto‘g‘ri yoki eskirgan',401);}
    await ensure(uid);
    if(req.method==='GET'&&req.url==='/api/v1/workspaces'){
     json(res,200,{ok:true,...await workspaces(uid)},headers);return true;
