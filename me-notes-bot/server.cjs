@@ -73,7 +73,7 @@ const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 m
  '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni bekor qilish\n'+
  'ℹ️ /yordam — yordam\n'+
  '📱 /start — Yagona moliya Mini App tugmasi\n\n'+
- 'Eslatma: chat hisoblari hozircha Mini Appning telefon xotirasi bilan sinxronlanmaydi.';
+ 'Eslatma: yangi Yagona moliya Mini App Turso orqali chat bilan birlashgan. Eski offline moliya sahifasi alohida.';
 function checkSecret(input){
  if(typeof input!=='string')return false;
  const a=Buffer.from(input),b=Buffer.from(secret);
@@ -88,7 +88,8 @@ async function monthlySalaryPlan(uid,w){
  if(!q.rows.length)return null;
  const b=await db.execute({sql:'SELECT category,limit_amount FROM mn_budgets WHERE workspace_id=? AND month=?',args:[w.id,range]});
  const hard=Object.fromEntries(b.rows.map(row=>[row.category,Number(row.limit_amount)]));
- const temp={kind:'personal',categories:F.BASE.personal,transactions:q.rows.map(row=>({kind:'income',category:'Maosh',amount:Number(row.amount),date:String(row.day)})),budgets:{[range]:hard}};
+ const prefs=await financeApi.preferences(w);
+ const temp={kind:'personal',categories:prefs.categories,keywords:prefs.keywords,transactions:q.rows.map(row=>({kind:'income',category:'Maosh',amount:Number(row.amount),date:String(row.day)})),budgets:{[range]:hard}};
  return F.salaryAllocation(temp,range);
 }
 function salaryText(plan){
@@ -103,7 +104,7 @@ function salaryText(plan){
    '💼 Biznes: '+f(plan.biznes)+'\n';
  if(plan.hardShortfall>0)text+='\n⚠️ Ro‘zg‘or qat’iy limitlariga '+f(plan.hardShortfall)+' YETMAYDI. Qat’iy limitlar o‘zgarmadi.\n';
  if(plan.leisureShortfall>0)text+='\n⚠️ Dam olish qat’iy limitiga '+f(plan.leisureShortfall)+' YETMAYDI.\n';
- return text+'\nBu haqiqiy pul o‘tkazmasi yoki qo‘shimcha xarajat emas. Mini App hisoblari hozircha chat bilan sinxron emas.';
+ return text+'\nBu haqiqiy pul o‘tkazmasi yoki qo‘shimcha xarajat emas. Yangi Yagona moliya Mini App ushbu Turso hisobi bilan birga ishlaydi.';
 }
 
 async function saveTelegramList(update,uid,w,chat_id,raw){
@@ -116,8 +117,9 @@ async function saveTelegramList(update,uid,w,chat_id,raw){
    '\n\n❌ Hech bir xarajat saqlanmadi. Qatorlarni tuzatib, ro‘yxatni qaytadan yuboring.');
   return true;
  }
+ const prefs=await financeApi.preferences(w);
  const result=parsed.items.map((t,i)=>({
-  ...t,category:F.categoryFor({kind:w.kind,categories:F.BASE[w.kind]},t.kind,t.note),
+  ...t,category:F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},t.kind,t.note),
   id:randomUUID(),updateId:listLineUpdateId(update.update_id,i)
  }));
  // The durable marker survives /bekor, so Telegram retries can never recreate
@@ -212,7 +214,8 @@ async function handleMessage(update){
  if(command==='/limit'){
   const m2=text.match(/^\/limit(?:@\w+)?\s+(.+?)\s+(\d[\d .,]*(?:\s*(?:ming|mln|k))?)$/i);
   if(!m2){await send(chat_id,'Misol: /limit Transport 100000');return;}
-  const cat=F.BASE[w.kind].expense.find(c=>c.toLowerCase()===m2[1].toLowerCase());
+  const prefs=await financeApi.preferences(w);
+   const cat=prefs.categories.expense.find(c=>c.toLowerCase()===m2[1].toLowerCase());
   let parsed;try{parsed=F.parseFast(m2[2]+' limit');}catch(e){parsed=null;}
   if(!cat||!parsed){await send(chat_id,'Kategoriya yoki summa noto‘g‘ri. /limit Transport 100000');return;}
   await db.execute({sql:'INSERT INTO mn_budgets(workspace_id,month,category,limit_amount) VALUES(?,?,?,?) ON CONFLICT(workspace_id,month,category) DO UPDATE SET limit_amount=excluded.limit_amount',args:[w.id,thisMonth(),cat,parsed.amount]});
@@ -222,7 +225,8 @@ async function handleMessage(update){
  if(await saveTelegramList(update,uid,w,chat_id,text))return;
  let parsed;try{parsed=F.parseFast(text);}catch(e){parsed=null;}
  if(!parsed){await send(chat_id,'Yozuvni tushunmadim. Masalan:\n25 ming taksi\n+3 mln oylik');return;}
- const cat=F.categoryFor({kind:w.kind,categories:F.BASE[w.kind]},parsed.kind,parsed.note);
+ const prefs=await financeApi.preferences(w);
+ const cat=F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},parsed.kind,parsed.note);
  const beforeQuery=await db.execute({sql:"SELECT COALESCE(SUM(amount),0) AS total FROM mn_transactions WHERE workspace_id=? AND kind='expense' AND category=? AND day>=? AND day<?",args:[w.id,cat,thisMonth()+'-01',nextMonth(thisMonth())+'-01']});
  const before=Number(beforeQuery.rows[0].total);
  const saved=await db.execute({sql:'INSERT OR IGNORE INTO mn_transactions(id,uid,workspace_id,update_id,kind,category,amount,note,day,created) VALUES(?,?,?,?,?,?,?,?,?,?)',
