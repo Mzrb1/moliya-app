@@ -12,16 +12,17 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 .gap-top{margin-top:12px}.line{border-top:1px solid #eef0f4;padding:12px 0}.line:first-child{border:0}.bar{height:8px;border-radius:9px;background:#ecf0f5;overflow:hidden;margin-top:7px}.bar-fill{height:100%;background:#4c93e5}.bar-fill.over{background:#d85e4b}.hidden{display:none!important}.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.notice{font-size:13px;border-radius:12px;padding:10px 12px;background:#fff2df;color:#815317;margin:10px 0}.notice.ok{background:#e8f8ed;color:#146a41}.status{font-size:12px;margin:8px 0;color:var(--muted)}.status.warn{color:#ad4b22}.empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
 .bottom{position:fixed;bottom:0;left:0;right:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:7px 8px calc(8px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--stroke)}.bottom button,.bottom a{background:transparent;border:0;border-radius:11px;padding:7px 1px;color:#607084;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px}.bottom button.active{color:var(--blue);background:#eaf2ff;font-weight:800}.bottom .glyph{font-size:20px}
 .headline{display:flex;justify-content:space-between;align-items:center;gap:8px}.loader{width:16px;height:16px;border:2px solid #b7cef3;border-top-color:var(--blue);border-radius:50%;animation:spin .65s linear infinite;display:inline-block}@keyframes spin{to{transform:rotate(360deg)}}
+details.card>summary{cursor:pointer;font-weight:750;list-style:revert}details.card:not([open]){padding-top:15px;padding-bottom:15px}
 @media(max-width:380px){main{padding:12px 10px 98px}.card{padding:13px}.value{font-size:23px}.metric .number{font-size:15px}}
 </style></head><body><main>
-<header class="top"><div class="logo">ME</div><div class="grow"><h1 class="title">ME Notes</h1><div class="sub">Yagona moliya · Sinov</div></div><button class="header-action" type="button" id="open-settings" aria-label="Sozlamalar">⚙️</button></header>
+<header class="top"><div class="logo">ME</div><div class="grow"><h1 class="title">ME Notes</h1><div class="sub">Moliya boshqaruvi</div></div><button class="header-action" type="button" id="open-settings" aria-label="Sozlamalar">⚙️</button></header>
 <div id="notices" role="status" aria-live="polite"></div><div id="sync-status" class="status">Ulanish tekshirilmoqda…</div>
-<section id="welcome" class="card hidden"><h2>Telegram ichidan oching</h2><p class="tiny">Yagona hisobga xavfsiz ulanish uchun @ME_notes_bot ga /start yozib, «Yagona moliya — Mini App» tugmasini bosing. Oddiy brauzer havolasidan Telegram identifikatsiyasi uzatilmaydi.</p><a href="https://t.me/ME_notes_bot" class="btn" style="display:inline-block">Telegram botga o‘tish</a><p class="tiny">Eski saqlangan yozuvlaringiz avvalgi sahifada qoladi: <a href="finance.html">Eski moliya sahifasi</a>.</p></section>
+<section id="welcome" class="card hidden"><h2>Telegram ichidan oching</h2><p class="tiny">@ME_notes_bot orqali Mini App’ni oching.</p><a href="https://t.me/ME_notes_bot" class="btn" style="display:inline-block">Telegram botga o‘tish</a></section>
 <section id="connection-help" class="card hidden">
  <h2>Hisobga ulanish</h2>
  <p id="connection-explain" class="tiny">Telegram moliya ma’lumotlari yuklanmoqda.</p>
  <div class="flex"><button id="retry-connect" type="button" class="btn">Qayta ulanish</button><a href="https://t.me/ME_notes_bot" class="btn alt">Botni ochish</a></div>
- <p class="tiny gap-top">Mavjud yozuvlaringiz serverda va eski moliya sahifasida alohida saqlangan. Ilovani o‘chirib, keshni tozalashga shoshilmang.</p>
+ <p class="tiny gap-top">Yozuvlaringiz saqlangan. Ilova xotirasini tozalamang.</p>
  </section>
 <div id="app" class="hidden">
 <section class="card"><div class="field-grid"><div><label for="workspace">Hisob</label><select id="workspace"></select></div><div><label for="month">Oy</label><input id="month" type="month"/></div></div><div class="flex gap-top"><button type="button" id="new-account" class="btn alt">+ Hisob ochish</button><span class="pill" id="account-kind"></span></div><form id="account-form" class="hidden gap-top"><div class="field-grid"><div><label for="account-type">Hisob turi</label><select id="account-type"><option value="personal">Shaxsiy</option><option value="family">Oilaviy</option><option value="business">Biznes</option></select></div><div><label for="account-name">Hisob nomi</label><input id="account-name" maxlength="60" placeholder="Masalan: Oilamiz"/></div></div><button type="submit" class="btn gap-top">Hisobni ochish</button></form></section>
@@ -30,9 +31,9 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
  <span class="tiny">Bu bankdagi haqiqiy qoldiq emas</span><div class="value" id="net">—</div>
  <div class="metrics gap-top"><div class="metric"><span class="tiny">Kirim</span><span class="number green" id="income">—</span></div><div class="metric"><span class="tiny">Chiqim</span><span class="number red" id="expense">—</span></div></div>
 </div>
-<div class="card"><h2>⚡ Bir xabarda yozing</h2><p class="tiny">Bitta xarajat yoki har qatorga bittadan ro‘yxat:</p>
+<div class="card"><h2>⚡ Tezkor yozuv</h2>
 <form id="quick-form"><textarea id="quick-text" maxlength="3000" placeholder="25 ming taksi&#10;Tushlik 35000&#10;+3 mln oylik" required></textarea>
-<p id="quick-month-hint" class="tiny gap-top">Tezkor yozuv faqat joriy oyga kiritiladi. O‘tgan oy uchun «Batafsil kiritish»da sanani tanlang.</p>
+<p id="quick-month-hint" class="tiny gap-top hidden"></p>
 <div id="quick-preview" class="tiny gap-top"></div><button id="quick-save" class="btn gap-top" type="submit">Saqlash</button></form></div>
 <div class="card"><div class="headline"><h2>✍️ Batafsil kiritish</h2><button id="manual-toggle" type="button" class="btn alt" aria-expanded="false" aria-controls="manual-form">Ochish</button></div>
 <form id="manual-form" class="hidden">
@@ -47,7 +48,7 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 </section>
 <section id="view-records" class="hidden">
 <div id="edit-card" class="card hidden">
-<h2>✏️ Yozuvni tahrirlash</h2><p class="tiny">Saqlasangiz yangi summa va kategoriya chatdagi umumiy hisobotga ham ta’sir qiladi.</p>
+<h2>✏️ Yozuvni tahrirlash</h2>
 <form id="edit-form">
 <div class="field-grid"><div><label for="edit-kind">Turi</label><select id="edit-kind"><option value="expense">Xarajat</option><option value="income">Daromad</option></select></div>
 <div><label for="edit-date">Sana</label><input id="edit-date" type="date" required/></div></div>
@@ -55,17 +56,17 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 <div><label for="edit-category">Kategoriya</label><select id="edit-category" required></select></div></div>
 <label for="edit-note">Izoh</label><input id="edit-note" maxlength="160" required/>
 <div class="flex gap-top"><button type="submit" class="btn">O‘zgarishni saqlash</button><button type="button" id="edit-cancel" class="btn alt">Bekor</button></div></form></div>
-<div class="card"><h2>🧾 Yozuvlar</h2><p class="tiny">Telegram chat va Mini App bitta bazada. Har bir yozuvni tahrirlash yoki o‘chirish mumkin.</p><div id="records"></div></div></section>
+<div class="card"><h2>🧾 Yozuvlar</h2><div id="records"></div></div></section>
 <section id="view-report" class="hidden">
 <div class="card"><h2>📊 Oylik hisobot</h2>
 <div class="metrics"><div class="metric"><div class="tiny">Daromad</div><strong id="report-income" class="number green">—</strong></div><div class="metric"><div class="tiny">Xarajat</div><strong id="report-expense" class="number red">—</strong></div></div>
 <div class="gap-top"><span class="tiny">Hisobiy farq (bank balansi emas)</span><div class="value" id="report-net">—</div></div></div>
 <div class="card"><h2>Kategoriyalar kesimida</h2><div id="report-categories"></div></div>
 <div class="card"><h2>Sinxronlash holati</h2><p id="report-sync" class="tiny"></p></div>
-</section><section id="view-budget" class="hidden"><div class="card"><h2>🧮 Oylik taqsimot</h2><p id="allocation-intro" class="tiny"></p><div id="allocation"></div></div><div class="card"><h2>🎯 Kategoriya limitlari</h2><p class="tiny">Taqsimotdan hisoblangan limitlar taxminiy. Tasdiqlangan limitlar qat’iy saqlanadi. Mavjud pul yetmasa ogohlantirish ko‘rsatiladi.</p><div id="limits"></div></div></section>
+</section><section id="view-budget" class="hidden"><div class="card"><h2>🧮 Oylik taqsimot</h2><p id="allocation-intro" class="tiny"></p><div id="allocation"></div></div><div class="card"><h2>🎯 Kategoriya limitlari</h2><div id="limits"></div></div></section>
 <section id="view-settings" class="hidden">
 <div class="card"><h2>🏷 Kategoriyalar va kalit so‘zlar</h2>
-<p class="tiny">Kalit so‘zlar bo‘yicha avtomatik tasniflash chat va Mini App’da bir xil ishlaydi. Eski yozuvlar avtomatik o‘zgartirilmaydi.</p>
+<p class="tiny">Yangi qoidalar eski yozuvlarni o‘zgartirmaydi.</p>
 <div class="field-grid"><div><label for="settings-kind">Kategoriya turi</label><select id="settings-kind"><option value="expense">Xarajat</option><option value="income">Daromad</option></select></div>
 <div><label for="settings-category">Kategoriya</label><select id="settings-category"></select></div></div>
 <div id="category-list" class="gap-top"></div>
@@ -78,7 +79,7 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 </div>
 <div class="card" id="monthly-archive">
 <h2>🗃 Oylik arxiv</h2>
-<p class="tiny">Har bir oy Turso’da alohida saqlanadi. Tugagan oyni «Yakunlash» faqat <strong>tahrirlanmaydigan</strong> qiladi, yozuvlarni o‘chirmaydi. Keyin «Qayta ochish» mumkin. Avval oylik JSON nusxasini yuklab oling.</p>
+<p class="tiny">Yakunlangan oy saqlanadi, faqat tahrirlanmaydi. Oldin JSON nusxa oling.</p>
 <div id="month-history" class="gap-top" aria-live="polite"></div>
 <p id="month-archive-status" class="tiny gap-top">Tanlangan oy: —</p>
 <div class="flex gap-top">
@@ -86,19 +87,19 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 <button id="archive-close" type="button" class="btn">Oyni yakunlash</button>
 <button id="archive-reopen" type="button" class="btn alt">Qayta ochish</button>
 </div>
-<p class="tiny gap-top">Joriy oyni yakunlab bo‘lmaydi. O‘tgan oylar keyingi oy hisobiga qo‘shilmaydi. JSON faylni xavfsiz joyda saqlang.</p>
+
 </div>
-<div class="card"><h2>⚙️ Sozlamalar va zaxira</h2><p class="tiny">Yangi yozuvlar Telegram chat bilan Turso’da sinxronlanadi. Internet uzilganda kiritilgan yozuvlar shu telefonda navbatda saqlanib, ulanish tiklanganda yuboriladi.</p>
-<div id="queue-info" class="notice"></div><div class="flex"><button type="button" id="sync-now" class="btn alt">Sinxronlash</button><button type="button" id="export-data" class="btn alt">Tanlangan oy JSON</button></div></div>
-<div class="card"><h2>Eski Mini App ma’lumotlarini ko‘chirish</h2>
-<p class="tiny">Avval eski sahifadagi JSON zaxirani oling. Keyin qaysi eski hisob yozuvlari yangi hisobga qo‘shilishini ko‘rib, <strong>o‘zingiz tasdiqlaysiz</strong>. Oldingi yozuvlar o‘chirilmaydi. Chatga ilgari kiritilgan bir xil xarajatlarni import qilsangiz, jami ikki marta chiqishi mumkin.</p>
+<div class="card"><h2>🔄 Sinxronlash</h2>
+<div id="queue-info" class="tiny"></div><div class="flex gap-top"><button type="button" id="sync-now" class="btn alt">Sinxronlash</button></div></div>
+<details class="card" id="legacy-migration"><summary>Eski moliya yozuvlarini ko‘chirish</summary><div class="gap-top">
+<p class="tiny">Avval eski hisobning JSON nusxasini oling. Takror yozuvlarni ko‘chirmang: summalar ikki marta hisoblanishi mumkin.</p>
 <a href="finance.html" class="btn alt" style="display:inline-block">Eski Mini App / Zaxira</a>
 <div class="flex gap-top"><button type="button" class="btn alt" id="detect-legacy">Shu qurilmadan qidirish</button></div>
 <label for="legacy-file">Yoki JSON zaxira faylini tanlang</label><input id="legacy-file" type="file" accept="application/json,.json"/>
 <div id="legacy-preview" class="tiny gap-top"></div>
 <div id="import-panel" class="hidden"><label for="legacy-workspace">Qaysi eski hisob?</label><select id="legacy-workspace"></select>
-<p class="tiny">Tanlangan eski hisob bilan hozirgi yangi hisob turi bir xil bo‘lishi kerak.</p>
-<button type="button" id="confirm-import" class="btn gap-top">Ko‘chirishni tasdiqlash</button></div></div><div class="card"><h2>📚 Darslar va kundalik</h2><p class="tiny">Sahifalab 1–2-darslari va Mening kundaligim alohida saqlanadi.</p><a class="btn alt" href="index.html" style="display:inline-block">Kundalikni ochish</a></div></section>
+
+<button type="button" id="confirm-import" class="btn gap-top">Ko‘chirishni tasdiqlash</button></div></div></details></section>
 </div>
 </main>
 <nav class="bottom" aria-label="Asosiy menyu"><button type="button" data-view="home" class="active"><span class="glyph">🏠</span>Asosiy</button><button type="button" data-view="records"><span class="glyph">🧾</span>Yozuvlar</button><button type="button" data-view="budget"><span class="glyph">🎯</span>Byudjet</button><button type="button" data-view="report"><span class="glyph">📊</span>Hisobot</button></nav>
