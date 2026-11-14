@@ -77,8 +77,8 @@ function noteStatus(text){
   (state.queue.length?' · '+state.queue.length+' ta amal navbatda':''));
  $('sync-status').className='status'+(!state.online?' warn':'');
  $('queue-info').textContent=state.queue.length?
-  state.queue.length+' ta saqlangan amal internet qaytganda Turso bazasiga yuboriladi. Yuborilmaguncha Telegram chatida ko‘rinmaydi.':
-  'Sinxronlanmagan yangi amal yo‘q.';
+  state.queue.length+' ta yozuv yuborilishini kutmoqda.':
+  'Barcha yozuvlar yuborilgan.';
 }
 async function request(path,options={}){
  if(!initData)throw Error('Telegram orqali ilovani oching');
@@ -212,8 +212,8 @@ function displayRows(target,items,limit=100){
 function renderPlan(data){
  const container=$('allocation');container.replaceChildren();
  const p=data.plan;
- $('allocation-intro').textContent=p?'Maoshdagi mablag‘ reja sifatida bo‘lingan. Bu qo‘shimcha xarajat emas.':
-  'Shaxsiy hisobda “+5 mln oylik” yozsangiz, avtomatik taqsimot ko‘rinadi.';
+ $('allocation-intro').textContent=p?'Rejadagi mablag‘lar (xarajat emas).':
+  'Maosh kirimidan keyin taqsimot ko‘rinadi.';
  if(!p)return;
  container.append(el('div','value',money(p.salary)));
  for(const [field,label] of F.SALARY_BUCKETS)container.append(line(label,money(p[field])));
@@ -384,10 +384,10 @@ function render(){
  const quickIsCurrent=state.month===thisMonth;
  $('quick-save').disabled=!quickIsCurrent;
  $('quick-text').disabled=!quickIsCurrent;
- $('quick-month-hint').textContent=quickIsCurrent?'Bu yerga yozilgan xarajatlar bugungi sanaga kiradi.':
-  'Siz '+state.month+' oyini ko‘ryapsiz. Tezkor yozuv uchun '+thisMonth+' oyini tanlang, yoki Batafsil kiritishda sanani belgilang.';
+ $('quick-month-hint').textContent=quickIsCurrent?'':'Boshqa oy tanlangan. Tezkor yozish uchun joriy oyni tanlang.';
+ $('quick-month-hint').classList.toggle('hidden',quickIsCurrent&&!data.closedAt);
  $('manual-form').querySelector('button[type=submit]').disabled=!!data.closedAt;
- if(data.closedAt){$('quick-month-hint').textContent='🗃 Oyning arxivi yopilgan. Uni Sozlamalar → Oylik arxivdan qayta ochishingiz mumkin.';}
+ if(data.closedAt){$('quick-month-hint').textContent='🗃 Bu oy arxivlangan. Qayta ochish uchun ⚙️ → Oylik arxiv.';$('quick-month-hint').classList.remove('hidden');}
  displayRows('recent',data.items,3);
  displayRows('records',data.items,150);
  renderPlan(data);renderBudgets(data);
@@ -594,7 +594,7 @@ function setup(){
  $('archive-close').onclick=()=>archiveAction('month_close');
  $('archive-reopen').onclick=()=>archiveAction('month_reopen');
  $('sync-now').onclick=pull;
- $('export-data').onclick=exportData;
+
  window.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible')return;
   const now=F.today().slice(0,7);
