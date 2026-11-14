@@ -14,7 +14,7 @@ test('Cleanup controls have concrete handlers and selected month safety',()=>{
  for(const action of ['month_clear','month_unclear'])assert.ok(js.includes("action:'"+action+"'"));
  assert.match(js,/month=state\.month/);
  assert.match(js,/state\.queue\.length/);
- assert.match(js,/JSON nusxa/);
+ assert.match(html,/JSON nusxa oling/);
 });
 test('All referenced DOM IDs exist, no duplicate IDs',()=>{
  const ids=[...html.matchAll(/id="([^"]+)"/g)].map(x=>x[1]);
