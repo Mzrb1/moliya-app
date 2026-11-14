@@ -70,7 +70,7 @@ function compute(){
  }
  const shadow={kind:w.kind,categories:prefs.categories,keywords:prefs.keywords,transactions:items,budgets:{[state.month]:budgets}};
  const summary=F.summary(shadow,state.month);
- return {items,summary,plan:F.salaryAllocation(shadow,state.month),w,prefs,closedAt:snapshot.closed_at||null};
+ return {items,summary,plan:F.salaryAllocation(shadow,state.month),w,prefs,closedAt:snapshot.closed_at||null,resetBackup:snapshot.reset_backup||null};
 }
 function noteStatus(text){
  $('sync-status').textContent=text||((state.online?'🟢 Telegram bilan ulangan':'🟠 Offline / ulanmagan')+
@@ -104,7 +104,7 @@ async function fetchLedger(){
  // Pin an asynchronous response to the requested account and month, not the
  // account/month currently selected when it eventually arrives.
  if(data.workspace?.id!==wid||data.month!==month)throw Error('Serverdan boshqa oy yoki hisob kelgan');
- state.base[wid+'|'+month]={transactions:data.transactions,budgets:data.budgets,closed_at:data.closed_at||null,
+ state.base[wid+'|'+month]={transactions:data.transactions,budgets:data.budgets,closed_at:data.closed_at||null,reset_backup:data.reset_backup||null,
   category_options:data.category_options||F.BASE[workspace.kind],
   keywords:data.keywords||{income:{},expense:{}}};
  save();
@@ -367,6 +367,53 @@ async function archiveAction(action){
  }catch(e){alertMessage('Oy holatini o‘zgartirib bo‘lmadi: '+e.message);}
 }
 
+function renderMonthReset(data){
+ const wid=current();
+ const preview=$('month-reset-preview');
+ if(!data||!wid){preview.textContent='Hisob hali yuklanmagan';return;}
+ const rows=data.items,backup=data.resetBackup,budgets=Object.keys(state.base[key()]?.budgets||{}).length;
+ preview.textContent=wid.name+' · '+state.month+': '+rows.length+' ta yozuv · daromad '+money(data.summary.income)+
+  ' · xarajat '+money(data.summary.expense)+'. Qat’iy limit: '+budgets+' ta.'+
+  (backup?' Oldingi tozalash nusxasi mavjud ('+backup.count+' ta yozuv).':'');
+ $('month-reset-apply').disabled=!state.online||!!data.closedAt||!!state.queue.length||!!backup||!rows.length&&!budgets;
+ $('month-reset-restore').disabled=!state.online||!!data.closedAt||!!state.queue.length||!backup;
+}
+async function applyMonthReset(){
+ try{
+  const data=compute(),w=current();
+  if(!data||!w)throw Error('Hisob yuklanmagan');
+  if(!state.online||state.queue.length)throw Error('Avval internetni ulang va navbatni sinxronlang');
+  if(data.closedAt)throw Error('Bu oy arxivlangan. Avval qayta oching');
+  if(data.resetBackup)throw Error('Bu oy uchun avvalgi tozalash nusxasi bor. Qayta tiklamasdan takror tozalash mumkin emas');
+  if($('month-reset-confirm').value.trim()!=='TOZALA')throw Error('Tasdiq uchun TOZALA deb yozing');
+  const month=state.month,kind=$('reset-include-budgets').checked;
+  if(!confirm(w.name+' hisobining '+month+' oyidagi BARCHA '+data.items.length+' ta kirim-chiqimni, shu jumladan OYLIK MAOSHNI'+
+   (kind?' va qat’iy limitlarni':'')+' tozalaysizmi?\nFaqat bu oy tozalanadi. Ilova haqiqiy yozuvlarni sinovdan ajrata olmaydi.'))return;
+  if(!confirm('Bu amal haqiqiy yozuvlaringizni ham tozalashi mumkin. Serverda tiklash nusxasi saqlanadi. Davom etasizmi?'))return;
+  const result=await request('/op',{method:'POST',body:newOp({action:'month_clear',month,include_budgets:kind,confirm:'TOZALA'})});
+  $('month-reset-confirm').value='';
+  await fetchLedger();await fetchMonthHistory();render();
+  alertMessage(month+' oyidan '+result.cleared+' ta yozuv tozalandi. Kerak bo‘lsa shu yerdan qayta tiklang.',true);
+ }catch(e){
+  alertMessage('Tozalash amalga oshmadi yoki tasdiqlanmadi: '+e.message);
+  if(state.online){try{await fetchLedger();render();}catch(_){}}
+ }
+}
+async function restoreMonthReset(){
+ try{
+  const data=compute(),w=current(),month=state.month;
+  if(!data||!w||!data.resetBackup)throw Error('Tiklanadigan nusxa yo‘q');
+  if(!state.online||state.queue.length)throw Error('Internet va bo‘sh sinxronlash navbati kerak');
+  if(!confirm(month+' oyidan tozalangan '+data.resetBackup.count+' ta yozuvni qayta tiklaysizmi? Yangi yozuvlar bo‘lsa server tiklashga ruxsat bermaydi.'))return;
+  const result=await request('/op',{method:'POST',body:newOp({action:'month_unclear',month,confirm:'TIKLA'})});
+  await fetchLedger();await fetchMonthHistory();render();
+  alertMessage(result.restored+' ta yozuv qayta tiklandi.',true);
+ }catch(e){
+  alertMessage('Tiklash amalga oshmadi: '+e.message);
+  if(state.online){try{await fetchLedger();render();}catch(_){}}
+ }
+}
+
 function render(){
  const w=current(),data=compute();
  $('app').classList.toggle('hidden',!w);
@@ -391,7 +438,7 @@ function render(){
  displayRows('recent',data.items,3);
  displayRows('records',data.items,150);
  renderPlan(data);renderBudgets(data);
- renderReport(data);renderSettings(data);renderMonthHistory();
+ renderReport(data);renderSettings(data);renderMonthHistory();renderMonthReset(data);
  fillCategory('manual-category',$('manual-kind').value);
  if(editingId)fillCategory('edit-category',$('edit-kind').value);
  noteStatus();
@@ -593,6 +640,8 @@ function setup(){
  $('archive-export').onclick=exportData;
  $('archive-close').onclick=()=>archiveAction('month_close');
  $('archive-reopen').onclick=()=>archiveAction('month_reopen');
+ $('month-reset-apply').onclick=applyMonthReset;
+ $('month-reset-restore').onclick=restoreMonthReset;
  $('sync-now').onclick=pull;
 
  window.addEventListener('visibilitychange',()=>{

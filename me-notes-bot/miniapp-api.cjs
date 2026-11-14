@@ -54,7 +54,10 @@ function makeFinanceApi({db,botToken,ensure}){
   'CREATE TABLE IF NOT EXISTS mn_import_rows (uid TEXT NOT NULL,source_workspace TEXT NOT NULL,source_txid TEXT NOT NULL,workspace_id TEXT NOT NULL,transaction_id TEXT NOT NULL,PRIMARY KEY(uid,source_workspace,source_txid))',
   'CREATE TABLE IF NOT EXISTS mn_extra_categories (workspace_id TEXT NOT NULL,kind TEXT NOT NULL,name TEXT NOT NULL,PRIMARY KEY(workspace_id,kind,name))',
   'CREATE TABLE IF NOT EXISTS mn_keyword_aliases (workspace_id TEXT NOT NULL,kind TEXT NOT NULL,category TEXT NOT NULL,word TEXT NOT NULL,PRIMARY KEY(workspace_id,kind,word))',
-  'CREATE TABLE IF NOT EXISTS mn_closed_months (workspace_id TEXT NOT NULL, uid TEXT NOT NULL, month TEXT NOT NULL, closed_at TEXT NOT NULL, PRIMARY KEY(workspace_id,month))'
+  'CREATE TABLE IF NOT EXISTS mn_closed_months (workspace_id TEXT NOT NULL, uid TEXT NOT NULL, month TEXT NOT NULL, closed_at TEXT NOT NULL, PRIMARY KEY(workspace_id,month))',
+  'CREATE TABLE IF NOT EXISTS mn_month_reset_meta (id TEXT PRIMARY KEY,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,month TEXT NOT NULL,created TEXT NOT NULL,restored_at TEXT)',
+  'CREATE TABLE IF NOT EXISTS mn_month_reset_tx (reset_id TEXT NOT NULL,id TEXT NOT NULL,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,update_id INTEGER NOT NULL,kind TEXT NOT NULL,category TEXT NOT NULL,amount INTEGER NOT NULL,note TEXT,day TEXT NOT NULL,created TEXT NOT NULL,PRIMARY KEY(reset_id,id))',
+  'CREATE TABLE IF NOT EXISTS mn_month_reset_budget (reset_id TEXT NOT NULL,workspace_id TEXT NOT NULL,month TEXT NOT NULL,category TEXT NOT NULL,limit_amount INTEGER NOT NULL,PRIMARY KEY(reset_id,category))'
  ],'write');
  }
  async function owned(uid,wid){
@@ -112,6 +115,20 @@ function makeFinanceApi({db,botToken,ensure}){
    month,closed_at:await closed(uid,wid,month),transactions,
    budgets:Object.fromEntries(budgets.rows.map(x=>[String(x.category),Number(x.limit_amount)])),totals};
  }
+ async function resetBackup(uid,wid,month){
+  if(!validMonth(month))throw Error('Oy noto‘g‘ri');
+  const r=await db.execute({sql:'SELECT id,created FROM mn_month_reset_meta WHERE uid=? AND workspace_id=? AND month=? AND restored_at IS NULL ORDER BY created DESC LIMIT 1',
+    args:[uid,wid,month]});
+  if(!r.rows.length)return null;
+  const info=r.rows[0];
+  const [rows,budgets]=await Promise.all([
+   db.execute({sql:'SELECT COUNT(*) AS n,COALESCE(SUM(CASE WHEN kind=? THEN amount ELSE 0 END),0) AS income,COALESCE(SUM(CASE WHEN kind=? THEN amount ELSE 0 END),0) AS expense FROM mn_month_reset_tx WHERE reset_id=?',
+    args:['income','expense',info.id]}),
+   db.execute({sql:'SELECT COUNT(*) AS n FROM mn_month_reset_budget WHERE reset_id=?',args:[info.id]})
+  ]);
+  return {id:String(info.id),created:String(info.created),count:Number(rows.rows[0].n),
+   income:Number(rows.rows[0].income),expense:Number(rows.rows[0].expense),budgets:Number(budgets.rows[0].n)};
+ }
  async function workspaces(uid){
   const [ws,user]=await Promise.all([
    db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? ORDER BY created,id',args:[uid]}),
@@ -135,13 +152,13 @@ function makeFinanceApi({db,botToken,ensure}){
   const summary=F.summary(shadow,month);
   const closedAt=await closed(uid,wid,month);
   const plan=F.salaryAllocation(shadow,month);
-  return {workspace:{id:w.id,kind:w.kind,name:w.name},month,closed_at:closedAt,transactions,more:false,
+  return {workspace:{id:w.id,kind:w.kind,name:w.name},month,closed_at:closedAt,reset_backup:await resetBackup(uid,wid,month),transactions,more:false,
     totals:{income:summary.income,expense:summary.expense,net:summary.net},categories:summary.budgets,category_options:prefs.categories,keywords:prefs.keywords,budgets,plan};
  }
  async function execute(uid,body){
   const opId=body?.op_id,wid=body?.workspace_id,action=body?.action;
   if(!validId(opId)||typeof wid!=='string'||wid.length>128)throw Error('Amal ID yoki hisob noto‘g‘ri');
-  if(!['add','add_many','budget','delete','edit','switch','new_workspace','import','category_add','category_delete','keyword_add','keyword_delete','month_close','month_reopen'].includes(action))throw Error('Amal turi noto‘g‘ri');
+  if(!['add','add_many','budget','delete','edit','switch','new_workspace','import','category_add','category_delete','keyword_add','keyword_delete','month_close','month_reopen','month_clear','month_unclear'].includes(action))throw Error('Amal turi noto‘g‘ri');
   const previous=await db.execute({sql:'SELECT uid FROM mn_api_ops WHERE id=?',args:[opId]});
   if(previous.rows.length){
    if(previous.rows[0].uid!==uid)throw forbidden('Amal boshqa foydalanuvchiga tegishli');
@@ -244,6 +261,44 @@ function makeFinanceApi({db,botToken,ensure}){
     steps.push({sql:'DELETE FROM mn_keyword_aliases WHERE workspace_id=? AND kind=? AND category=? AND word=?',
      args:[wid,kind,category,F.normalizeKeyword(word)]});
    }
+  }else if(action==='month_clear'){
+   const month=body.month,includeBudgets=body.include_budgets;
+   if(!validMonth(month)||body.confirm!=='TOZALA'||typeof includeBudgets!=='boolean')throw Error('Tozalash ma’lumotlari yoki tasdiq noto‘g‘ri');
+   await assertMonthWritable(uid,wid,month);
+   if(await resetBackup(uid,wid,month))throw Error('Bu oyda oldingi tozalash zaxirasi mavjud. Yangi tozalashdan oldin uni qayta tiklang');
+   const {start,end}=monthRange(month);
+   const [r,bs]=await Promise.all([
+    db.execute({sql:'SELECT COUNT(*) AS n FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<?',args:[uid,wid,start,end]}),
+    db.execute({sql:'SELECT COUNT(*) AS n FROM mn_budgets WHERE workspace_id=? AND month=?',args:[wid,month]})
+   ]);
+   const count=Number(r.rows[0].n),budgetCount=includeBudgets?Number(bs.rows[0].n):0;
+   if(count>10000)throw Error('10 000 tadan ko‘p yozuvni bu usulda tozalash mumkin emas');
+   if(count+budgetCount===0)throw Error('Tanlangan oyda tozalanadigan yozuv yoki limit yo‘q');
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   steps.push({sql:'INSERT INTO mn_month_reset_meta(id,uid,workspace_id,month,created,restored_at) VALUES(?,?,?,?,?,NULL)',args:[opId,uid,wid,month,now]});
+   steps.push({sql:'INSERT INTO mn_month_reset_tx(reset_id,id,uid,workspace_id,update_id,kind,category,amount,note,day,created) SELECT ?,id,uid,workspace_id,update_id,kind,category,amount,note,day,created FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<?',args:[opId,uid,wid,start,end]});
+   if(includeBudgets)steps.push({sql:'INSERT INTO mn_month_reset_budget(reset_id,workspace_id,month,category,limit_amount) SELECT ?,workspace_id,month,category,limit_amount FROM mn_budgets WHERE workspace_id=? AND month=?',args:[opId,wid,month]});
+   steps.push({sql:'DELETE FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<?',args:[uid,wid,start,end]});
+   if(includeBudgets)steps.push({sql:'DELETE FROM mn_budgets WHERE workspace_id=? AND month=?',args:[wid,month]});
+   result={month,cleared:count,cleared_budgets:budgetCount,backup_id:opId};
+  }else if(action==='month_unclear'){
+   const month=body.month;
+   if(!validMonth(month)||body.confirm!=='TIKLA')throw Error('Tiklash tasdiqi noto‘g‘ri');
+   await assertMonthWritable(uid,wid,month);
+   const backup=await resetBackup(uid,wid,month);
+   if(!backup)throw Error('Bu oy uchun tiklanadigan nusxa yo‘q');
+   const {start,end}=monthRange(month);
+   const [r,bs]=await Promise.all([
+    db.execute({sql:'SELECT COUNT(*) AS n FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<?',args:[uid,wid,start,end]}),
+    db.execute({sql:'SELECT COUNT(*) AS n FROM mn_budgets WHERE workspace_id=? AND month=?',args:[wid,month]})
+   ]);
+   if(Number(r.rows[0].n)>0||backup.budgets>0&&Number(bs.rows[0].n)>0)
+    throw Error('Tiklash xavfsizligi: bu oyda yangi yozuv yoki limit bor. Avval ularning zaxirasini olib, alohida tahrir qiling');
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   steps.push({sql:'INSERT INTO mn_transactions(id,uid,workspace_id,update_id,kind,category,amount,note,day,created) SELECT id,uid,workspace_id,update_id,kind,category,amount,note,day,created FROM mn_month_reset_tx WHERE reset_id=? AND uid=? AND workspace_id=?',args:[backup.id,uid,wid]});
+   steps.push({sql:'INSERT INTO mn_budgets(workspace_id,month,category,limit_amount) SELECT workspace_id,month,category,limit_amount FROM mn_month_reset_budget WHERE reset_id=? AND workspace_id=? AND month=?',args:[backup.id,wid,month]});
+   steps.push({sql:'UPDATE mn_month_reset_meta SET restored_at=? WHERE id=? AND uid=? AND workspace_id=?',args:[now,backup.id,uid,wid]});
+   result={month,restored:backup.count,restored_budgets:backup.budgets};
   }else if(action==='month_close'){
    const month=body.month;
    closedMonthPermitted(month);
@@ -314,6 +369,6 @@ function makeFinanceApi({db,botToken,ensure}){
    json(res,404,{ok:false,error:'API topilmadi'},headers);return true;
   }catch(e){respondError(res,e,headers);return true;}
  }
- return {init,handle,ledger,execute,preferences,monthHistory,exportMonth,closed};
+ return {init,handle,ledger,execute,preferences,monthHistory,exportMonth,closed,resetBackup};
 }
 module.exports={makeFinanceApi,prepareEntries,updateId,ORIGIN};

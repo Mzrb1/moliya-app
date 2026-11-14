@@ -314,3 +314,64 @@ test('Monthly cloud backup includes budgets and month metadata',async()=>{
  assert.equal(exported.workspace.kind,'personal');
  db.close();
 });
+
+
+test('Tanlangan oy testi bir operatsiyada zaxiralanib tozalanadi, oylik maosh ham',async()=>{
+ const {db,api}=await freshDb(),wid='personal-111';
+ await api.execute('111',{op_id:'web_reset_add_salary_0001',workspace_id:wid,action:'add',entry:{kind:'income',amount:5600000,category:'Maosh',date:'2026-11-13',note:'test maosh'}});
+ await api.execute('111',{op_id:'web_reset_add_taxi_00002',workspace_id:wid,action:'add',entry:{kind:'expense',amount:18000,date:'2026-11-13',note:'yo‘lga'}});
+ await api.execute('111',{op_id:'web_reset_add_oct_00003',workspace_id:wid,action:'add',entry:{kind:'expense',amount:12000,date:'2026-10-13',note:'taksi'}});
+ await api.execute('111',{op_id:'web_reset_budget_00004',workspace_id:wid,action:'budget',month:'2026-11',category:'Transport',limit:200000});
+ const op={op_id:'web_reset_month_00005',workspace_id:wid,action:'month_clear',month:'2026-11',include_budgets:true,confirm:'TOZALA'};
+ const cleared=await api.execute('111',op);
+ assert.equal(cleared.cleared,2);
+ assert.equal(cleared.cleared_budgets,1);
+ assert.equal((await api.execute('111',op)).already,true);
+ const now=await api.ledger('111',wid,'2026-11');
+ assert.equal(now.totals.income,0);
+ assert.equal(now.totals.expense,0);
+ assert.deepEqual(now.budgets,{});
+ assert.equal(now.reset_backup.count,2);
+ assert.equal(now.reset_backup.income,5600000);
+ assert.equal((await api.ledger('111',wid,'2026-10')).totals.expense,12000);
+ assert.equal((await api.ledger('222','personal-222','2026-11')).reset_backup,null);
+ db.close();
+});
+test('Tozalashdan so‘ng asl IDlar, daromad va limitlar qayta tiklanadi',async()=>{
+ const {db,api}=await freshDb(),wid='personal-111';
+ await api.execute('111',{op_id:'web_clean_salary_00001',workspace_id:wid,action:'add',entry:{kind:'income',amount:5000000,category:'Maosh',date:'2026-11-13',note:'test'}});
+ await api.execute('111',{op_id:'web_clean_budget_00001',workspace_id:wid,action:'budget',month:'2026-11',category:'Transport',limit:300000});
+ const id=(await api.ledger('111',wid,'2026-11')).transactions[0].id;
+ await api.execute('111',{op_id:'web_clean_month_00001',workspace_id:wid,action:'month_clear',month:'2026-11',include_budgets:true,confirm:'TOZALA'});
+ const restored=await api.execute('111',{op_id:'web_clean_restore_0001',workspace_id:wid,action:'month_unclear',month:'2026-11',confirm:'TIKLA'});
+ assert.equal(restored.restored,1);
+ assert.equal(restored.restored_budgets,1);
+ const after=await api.ledger('111',wid,'2026-11');
+ assert.equal(after.transactions[0].id,id);
+ assert.equal(after.totals.income,5000000);
+ assert.equal(after.budgets.Transport,300000);
+ assert.equal(after.reset_backup,null);
+ db.close();
+});
+test('Tasdiqsiz va begona hisobda oy tozalash rad etiladi',async()=>{
+ const {db,api}=await freshDb(),wid='personal-111';
+ await assert.rejects(()=>api.execute('111',{op_id:'web_missing_confirm_1',workspace_id:wid,action:'month_clear',month:'2026-11',include_budgets:true}),/tasdiq/);
+ await assert.rejects(()=>api.execute('222',{op_id:'web_wrong_user_0001',workspace_id:wid,action:'month_clear',month:'2026-11',include_budgets:true,confirm:'TOZALA'}));
+ db.close();
+});
+test('Tozalashdan so‘ng yangi real yozuv bor oyga zaxirani ko‘r-ko‘rona tiklamaydi',async()=>{
+ const {db,api}=await freshDb(),wid='personal-111';
+ await api.execute('111',{op_id:'web_reset_existing_0001',workspace_id:wid,action:'add',entry:{kind:'expense',amount:10000,date:'2026-11-13',note:'taksi'}});
+ await api.execute('111',{op_id:'web_reset_first_00001',workspace_id:wid,action:'month_clear',month:'2026-11',include_budgets:false,confirm:'TOZALA'});
+ await api.execute('111',{op_id:'web_reset_new_real_001',workspace_id:wid,action:'add',entry:{kind:'expense',amount:20000,date:'2026-11-14',note:'non'}});
+ await assert.rejects(()=>api.execute('111',{op_id:'web_reset_restore_no_1',workspace_id:wid,action:'month_unclear',month:'2026-11',confirm:'TIKLA'}),/xavfsizligi/);
+ assert.equal((await api.ledger('111',wid,'2026-11')).totals.expense,20000);
+ await assert.rejects(()=>api.execute('111',{op_id:'web_reset_again_00111',workspace_id:wid,action:'month_clear',month:'2026-11',include_budgets:false,confirm:'TOZALA'}),/oldingi tozalash/);
+ db.close();
+});
+test('Arxivlangan oy tozalanmaydi va tarixga tegilmaydi',async()=>{
+ const {db,api}=await freshDb(),wid='personal-111';
+ await api.execute('111',{op_id:'web_restrict_oct_close',workspace_id:wid,action:'month_close',month:'2026-10'});
+ await assert.rejects(()=>api.execute('111',{op_id:'web_restrict_oct_reset',workspace_id:wid,action:'month_clear',month:'2026-10',include_budgets:false,confirm:'TOZALA'}),/arxivlangan/);
+ db.close();
+});
