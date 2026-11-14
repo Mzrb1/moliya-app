@@ -61,7 +61,7 @@ async function active(uid){
 async function choose(uid){
  const q=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? ORDER BY created',args:[uid]});
  return {inline_keyboard:[
-  [{text:'📱 Yagona moliya — Mini App (sinov)',web_app:{url:'https://me-notes-sahifalab.onrender.com/finance-unified.html'}}],
+  [{text:'📱 Moliya boshqaruvi',web_app:{url:'https://me-notes-sahifalab.onrender.com/finance-unified.html'}}],
   ...q.rows.map(w=>[{text:w.name+' ('+F.KINDS[w.kind]+')',callback_data:'use:'+w.id}]),
   [{text:'➕ Shaxsiy',callback_data:'new:personal'},{text:'➕ Oilaviy',callback_data:'new:family'}],
   [{text:'➕ Biznes',callback_data:'new:business'}]
@@ -72,8 +72,7 @@ const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 m
  '📁 /hisob — hisobni almashtirish\n📊 /hisobot yoki /hisobot 2026-10 — kerakli oy\n🧮 /taqsimot yoki /taqsimot 2026-10 — oylik reja\n'+
  '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni bekor qilish\n'+
  'ℹ️ /yordam — yordam\n'+
- '📱 /start — Yagona moliya Mini App tugmasi\n\n'+
- 'Eslatma: yangi Yagona moliya Mini App Turso orqali chat bilan birlashgan. Eski offline moliya sahifasi alohida.';
+ '📱 /start — Moliya Mini App tugmasi';
 function checkSecret(input){
  if(typeof input!=='string')return false;
  const a=Buffer.from(input),b=Buffer.from(secret);
@@ -184,7 +183,7 @@ async function handleMessage(update){
  if(!m||m.chat?.type!=='private'||m.chat.id!==m.from?.id||typeof m.text!=='string')return;
  const uid=await ensure(m.from.id),w=await active(uid),chat_id=m.chat.id;
  const text=m.text.trim(),command=text.split(/\s+/)[0].replace(/@[\w]+$/,'').toLowerCase();
- if(command==='/start'){await send(chat_id,'Assalomu alaykum! 👋\n'+help,{reply_markup:await choose(uid)});return;}
+ if(command==='/start'){await send(chat_id,'📒 ME Notes\n📂 Hisob: '+w.name+'\nXarajat: 25 ming taksi\nBuyruqlar: /yordam',{reply_markup:await choose(uid)});return;}
  if(command==='/hisob'){await send(chat_id,'Hozirgi hisob: '+w.name+'\nHisobni tanlang:',{reply_markup:await choose(uid)});return;}
  if(command==='/yordam'||command==='/help'){await send(chat_id,help);return;}
  if(command==='/taqsimot'||command==='/hisobot'){
