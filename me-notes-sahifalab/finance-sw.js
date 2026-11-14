@@ -1,5 +1,5 @@
 /* ME Notes finance shell: only static files are cached. NEVER cache API/health/token requests. */
-const CACHE='me-notes-finance-shell-v1';
+const CACHE='me-notes-finance-shell-v2';
 const FILES=['./finance-unified.html','./finance-unified.js','./finance-core.js'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting()));
