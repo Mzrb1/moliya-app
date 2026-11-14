@@ -12,7 +12,7 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 .gap-top{margin-top:12px}.line{border-top:1px solid #eef0f4;padding:12px 0}.line:first-child{border:0}.bar{height:8px;border-radius:9px;background:#ecf0f5;overflow:hidden;margin-top:7px}.bar-fill{height:100%;background:#4c93e5}.bar-fill.over{background:#d85e4b}.hidden{display:none!important}.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.notice{font-size:13px;border-radius:12px;padding:10px 12px;background:#fff2df;color:#815317;margin:10px 0}.notice.ok{background:#e8f8ed;color:#146a41}.status{font-size:12px;margin:8px 0;color:var(--muted)}.status.warn{color:#ad4b22}.empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
 .bottom{position:fixed;bottom:0;left:0;right:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:7px 8px calc(8px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--stroke)}.bottom button,.bottom a{background:transparent;border:0;border-radius:11px;padding:7px 1px;color:#607084;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px}.bottom button.active{color:var(--blue);background:#eaf2ff;font-weight:800}.bottom .glyph{font-size:20px}
 .headline{display:flex;justify-content:space-between;align-items:center;gap:8px}.loader{width:16px;height:16px;border:2px solid #b7cef3;border-top-color:var(--blue);border-radius:50%;animation:spin .65s linear infinite;display:inline-block}@keyframes spin{to{transform:rotate(360deg)}}
-details.card>summary{cursor:pointer;font-weight:750;list-style:revert}details.card:not([open]){padding-top:15px;padding-bottom:15px}
+details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inline{display:flex;align-items:center;gap:8px;line-height:1.35}.check-inline input{width:18px;height:18px;min-height:18px;flex:none}details.card:not([open]){padding-top:15px;padding-bottom:15px}
 @media(max-width:380px){main{padding:12px 10px 98px}.card{padding:13px}.value{font-size:23px}.metric .number{font-size:15px}}
 </style></head><body><main>
 <header class="top"><div class="logo">ME</div><div class="grow"><h1 class="title">ME Notes</h1><div class="sub">Moliya boshqaruvi</div></div><button class="header-action" type="button" id="open-settings" aria-label="Sozlamalar">⚙️</button></header>
@@ -89,6 +89,17 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}details.ca
 </div>
 
 </div>
+<details class="card" id="month-test-cleanup">
+<summary>🧹 Sinov yozuvlarini tozalash</summary>
+<div class="gap-top">
+<p class="tiny">Faqat yuqorida tanlangan hisob va oy tozalanadi. <strong>Sinov va haqiqiy yozuvlarni ilova ajrata olmaydi.</strong> Agar bu oyda haqiqiy yozuvlaringiz bo‘lsa, barchasini tozalamang. Tozalashdan avval JSON nusxa oling; serverda tiklash nusxasi ham saqlanadi.</p>
+<div id="month-reset-preview" class="notice"></div>
+<label class="check-inline"><input id="reset-include-budgets" type="checkbox"/> Shu oyning qat’iy limitlarini ham tozalash</label>
+<label for="month-reset-confirm">Tasdiqlash uchun TOZALA deb yozing</label>
+<input type="text" id="month-reset-confirm" placeholder="TOZALA" autocapitalize="characters" autocomplete="off" spellcheck="false"/>
+<div class="flex gap-top"><button type="button" class="btn warning" id="month-reset-apply">Tanlangan oyni tozalash</button>
+<button type="button" class="btn alt" id="month-reset-restore">Oxirgi tozalashni tiklash</button></div>
+</div></details>
 <div class="card"><h2>🔄 Sinxronlash</h2>
 <div id="queue-info" class="tiny"></div><div class="flex gap-top"><button type="button" id="sync-now" class="btn alt">Sinxronlash</button></div></div>
 <details class="card" id="legacy-migration"><summary>Eski moliya yozuvlarini ko‘chirish</summary><div class="gap-top">
