@@ -63,13 +63,22 @@ async function active(uid){
  const q=await db.execute({sql:'SELECT w.id,w.kind,w.name FROM mn_users u JOIN mn_workspaces w ON u.active=w.id WHERE u.uid=? AND w.uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id)',args:[uid,uid]});
  return q.rows[0];
 }
-async function choose(uid){
- const q=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces w WHERE uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY created,id',args:[uid]});
- return {inline_keyboard:[
-  [{text:'📱 Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}}],
-  ...q.rows.map((w,i)=>[{text:(i+1)+'. '+w.name+' · '+F.KINDS[w.kind],callback_data:'use:'+w.id}]),
-  [{text:'⚙️ Hisob ochish / boshqarish',web_app:{url:FINANCE_MINI_APP_URL}}]
- ]};
+async function choose(uid,expanded=false){
+ const keyboard=[
+  [{text:'📱 Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}}]
+ ];
+ if(expanded){
+  const [q,w]=await Promise.all([
+   db.execute({sql:'SELECT id,kind,name FROM mn_workspaces w WHERE uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY created,id',args:[uid]}),
+   active(uid)
+  ]);
+  keyboard.push(...q.rows.map(x=>[{
+   text:(x.id===w.id?'✅ ':'📂 ')+x.name+' · '+F.KINDS[x.kind]+' · '+String(x.id).slice(-6),
+   callback_data:'use:'+x.id
+  }]));
+  keyboard.push([{text:'⚙️ Hisoblarni boshqarish',web_app:{url:FINANCE_MINI_APP_URL}}]);
+ }
+ return {inline_keyboard:keyboard};
 }
 const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 mln oylik\n\n'+
  '📋 Bir nechta xarajatni har qatorda yozing (20 tagacha):\nTushlik 98000\n18 ming yo‘lga\n\n'+
@@ -190,9 +199,9 @@ async function handleMessage(update){
  if(command==='/start'){
   try{await api('setChatMenuButton',{chat_id,menu_button:financeMenuButton()});}
   catch(e){console.error('ME Notes chat menu setup failed:',String(e.message).slice(0,100));}
-  await send(chat_id,'📒 ME Notes\n📂 Hisob: '+w.name+'\nXarajat: 25 ming taksi\nBuyruqlar: /yordam',{reply_markup:await choose(uid)});return;
+  await send(chat_id,'📒 ME Notes\n📂 Faol hisob: '+w.name+'\nXarajat: 25 ming taksi\nBuyruqlar: /yordam',{reply_markup:await choose(uid)});return;
  }
- if(command==='/hisob'){await send(chat_id,'Hozirgi hisob: '+w.name+'\nHisobni tanlang:',{reply_markup:await choose(uid)});return;}
+ if(command==='/hisob'){await send(chat_id,'Faol hisob: '+w.name+'\nHisobni tanlang yoki boshqaring:',{reply_markup:await choose(uid,true)});return;}
  if(command==='/yordam'||command==='/help'){await send(chat_id,help);return;}
  if(command==='/taqsimot'||command==='/hisobot'){
   const month=(text.split(/\s+/)[1]||thisMonth());

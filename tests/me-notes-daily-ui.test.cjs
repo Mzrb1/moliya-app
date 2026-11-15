@@ -45,7 +45,7 @@ test('Sahifalab lesson content preserved and daily landing concise',()=>{
 test('Telegram /start is concise while detailed reference stays in /yordam',()=>{
  assert.doesNotMatch(chat,/Mini App \(sinov\)/);
  assert.match(chat,/if\(command==='\/start'\)\{/);
- assert.match(chat,/📒 ME Notes\\n📂 Hisob:/);
+ assert.match(chat,/📒 ME Notes\\n📂 Faol hisob:/);
  assert.match(chat,/if\(command==='\/yordam'/);
  assert.match(chat,/25 ming taksi\\ntushlik 35000/);
  assert.doesNotMatch(chat,/Eski offline moliya sahifasi alohida/);
