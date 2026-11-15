@@ -375,3 +375,73 @@ test('Arxivlangan oy tozalanmaydi va tarixga tegilmaydi',async()=>{
  await assert.rejects(()=>api.execute('111',{op_id:'web_restrict_oct_reset',workspace_id:wid,action:'month_clear',month:'2026-10',include_budgets:false,confirm:'TOZALA'}),/arxivlangan/);
  db.close();
 });
+
+
+test('User opens a named account, sees it once, and cannot create a duplicate',async()=>{
+ const {db,api}=await freshDb();
+ const id='personal-111';
+ const create={op_id:'ws_add_family_111111',workspace_id:id,action:'new_workspace',new_kind:'family',name:'Oilamiz'};
+ const first=await api.execute('111',create);
+ assert.ok(first.workspace_id);
+ assert.equal((await api.execute('111',create)).already,true);
+ const listed=await api.workspaces('111');
+ assert.equal(listed.workspaces.length,2);
+ assert.equal(listed.active,first.workspace_id);
+ assert.equal(listed.workspaces[1].name,'Oilamiz');
+ await assert.rejects(()=>api.execute('111',{...create,op_id:'ws_add_family_again_111'}),/allaqachon/);
+ assert.equal((await api.workspaces('222')).workspaces.length,1);
+ db.close();
+});
+test('Account close keeps the original transactions and budgets and can restore them',async()=>{
+ const {db,api}=await freshDb();
+ const account=(await api.execute('111',{op_id:'ws_for_archive_11111',workspace_id:'personal-111',action:'new_workspace',new_kind:'family',name:'Oilamiz'})).workspace_id;
+ await api.execute('111',{op_id:'ws_archive_tx_111111',workspace_id:account,action:'add',
+   entry:{kind:'income',amount:500000,date:'2026-11-14',category:'Boshqa',note:'test'}});
+ await api.execute('111',{op_id:'ws_archive_budget_111',workspace_id:account,action:'budget',month:'2026-11',category:'Transport',limit:100000});
+ const archived=await api.execute('111',{op_id:'ws_archive_act_11111',workspace_id:account,action:'workspace_archive',confirm:'YOP'});
+ assert.equal(archived.archived,account);
+ const view=await api.workspaces('111');
+ assert.equal(view.active,'personal-111');
+ assert.equal(view.workspaces.length,1);
+ assert.equal(view.archived[0].id,account);
+ assert.equal(view.archived[0].records,1);
+ await assert.rejects(()=>api.ledger('111',account,'2026-11'),/ruxsat/);
+ await assert.rejects(()=>api.execute('111',{op_id:'ws_archive_add_block',workspace_id:account,action:'add',
+   entry:{kind:'expense',amount:1000,date:'2026-11-14',note:'blocked'}}),/ruxsat/);
+ const restored=await api.execute('111',{op_id:'ws_restore_act_11111',workspace_id:'personal-111',action:'workspace_restore',
+  target_workspace_id:account,confirm:'TIKLA'});
+ assert.equal(restored.restored,account);
+ const data=await api.ledger('111',account,'2026-11');
+ assert.equal(data.totals.income,500000);
+ assert.equal(data.budgets.Transport,100000);
+ assert.equal((await api.workspaces('111')).workspaces.length,2);
+ db.close();
+});
+test('Last account cannot be archived; wrong confirmation rejected',async()=>{
+ const {db,api}=await freshDb();
+ await assert.rejects(()=>api.execute('111',{op_id:'ws_last_block_111111',workspace_id:'personal-111',action:'workspace_archive',confirm:'YOP'}),/Oxirgi/);
+ await assert.rejects(()=>api.execute('111',{op_id:'ws_archive_no_confirm',workspace_id:'personal-111',action:'workspace_archive',confirm:'bad'}),/YOP/);
+ assert.equal((await api.workspaces('111')).workspaces.length,1);
+ db.close();
+});
+test('Renaming accounts keeps identity, changes only target and blocks duplicate names',async()=>{
+ const {db,api}=await freshDb();
+ const account=(await api.execute('111',{op_id:'ws_rename_create_111',workspace_id:'personal-111',action:'new_workspace',new_kind:'business',name:'Biznes-1'})).workspace_id;
+ await api.execute('111',{op_id:'ws_rename_execute_111',workspace_id:account,action:'workspace_rename',name:'Savdo'});
+ const ws=await api.workspaces('111');
+ assert.equal(ws.workspaces.find(x=>x.id===account).name,'Savdo');
+ await assert.rejects(()=>api.execute('111',{op_id:'ws_rename_dupe_111',workspace_id:account,action:'workspace_rename',name:'Shaxsiy'}),/allaqachon|nomli boshqa/);
+ // These names can differ from the original default; test a literal active name as well.
+ await assert.rejects(()=>api.execute('111',{op_id:'ws_rename_existing_111',workspace_id:account,action:'workspace_rename',name:'Shaxsiy moliyam'}),/nomli boshqa/);
+ db.close();
+});
+test('Archived account cannot be restored by another user',async()=>{
+ const {db,api}=await freshDb();
+ const account=(await api.execute('111',{op_id:'ws_xuser_created_111',workspace_id:'personal-111',action:'new_workspace',new_kind:'business',name:'X Biznes'})).workspace_id;
+ await api.execute('111',{op_id:'ws_xuser_archive_111',workspace_id:account,action:'workspace_archive',confirm:'YOP'});
+ await assert.rejects(()=>api.execute('222',{op_id:'ws_xuser_restore_222',workspace_id:'personal-222',
+   action:'workspace_restore',target_workspace_id:account,confirm:'TIKLA'}),/Tiklanadigan/);
+ await assert.rejects(()=>api.execute('222',{op_id:'ws_xuser_close_222',workspace_id:account,action:'workspace_archive',confirm:'YOP'}),/ruxsat/);
+ assert.equal((await api.workspaces('222')).archived.length,0);
+ db.close();
+});
