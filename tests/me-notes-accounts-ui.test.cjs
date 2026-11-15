@@ -27,7 +27,7 @@ test('Chat account selection no longer has stale quick-create buttons',()=>{
  assert.doesNotMatch(bot,/callback_data:'new:personal'/);
  assert.doesNotMatch(bot,/callback_data:'new:family'/);
  assert.match(bot,/Old Telegram messages may contain obsolete quick-create/);
- assert.match(bot,/Hisob ochish \/ boshqarish/);
+ assert.match(bot,/Hisoblarni boshqarish/);
  assert.match(bot,/mn_workspace_archive/);
 });
 test('All finance JS references resolve to unique HTML IDs',()=>{
@@ -42,4 +42,21 @@ test('Account manager shows unique short IDs for duplicate old names and archive
  assert.match(js,/state\.archived=cache\.archived\|\|\[\]/);
  assert.match(js,/workspace_archive/);
  assert.match(js,/workspace_restore/);
+});
+
+test('/start shows active account once, not every workspace as numbered buttons',()=>{
+ const start=bot.slice(bot.indexOf("if(command==='/start')"),bot.indexOf("if(command==='/hisob')"));
+ assert.match(start,/Faol hisob:/);
+ assert.match(start,/reply_markup:await choose\(uid\)/);
+ const menu=bot.slice(bot.indexOf('async function choose(uid'),bot.indexOf('const help='));
+ assert.match(menu,/async function choose\(uid,expanded=false\)/);
+ assert.match(menu,/if\(expanded\)/);
+ assert.match(menu,/📱 Moliya boshqaruvi/);
+ assert.doesNotMatch(start,/choose\(uid,true\)/);
+});
+test('Full list only shown via /hisob with active marker and unique IDs',()=>{
+ const command=bot.slice(bot.indexOf("if(command==='/hisob')"),bot.indexOf("if(command==='/yordam')"));
+ assert.match(command,/choose\(uid,true\)/);
+ assert.match(bot,/x\.id===w\.id\?'✅ '/);
+ assert.match(bot,/String\(x\.id\)\.slice\(-6\)/);
 });
