@@ -441,7 +441,7 @@ function renderAccounts(){
  for(const w of list){
   const row=el('div','account-row'),main=el('div','account-detail'),actions=el('div','account-actions');
   main.append(el('div','strong',w.name+(w.id===state.active?' · Faol':'')));
-  main.append(el('div','tiny',F.KINDS[w.kind]+' · '+Number(w.records||0)+' ta yozuv'));
+  main.append(el('div','tiny',F.KINDS[w.kind]+' · '+Number(w.records||0)+' ta yozuv · ID '+w.id.slice(-6)));
   actions.append(
    accountNodeButton('Nomini o‘zgartirish','alt',async()=>{
     const name=prompt('Hisobning yangi nomi (2–60 belgi):',w.name);
@@ -468,7 +468,7 @@ function renderAccounts(){
  for(const w of state.archived){
   const row=el('div','account-row'),main=el('div','account-detail'),actions=el('div','account-actions');
   main.append(el('div','strong',w.name));
-  main.append(el('div','tiny',F.KINDS[w.kind]+' · '+Number(w.records||0)+' ta yozuv saqlangan'));
+  main.append(el('div','tiny',F.KINDS[w.kind]+' · '+Number(w.records||0)+' ta yozuv saqlangan · ID '+w.id.slice(-6)));
   actions.append(accountNodeButton('Qayta ochish','alt',async()=>{
    if(!confirm('“'+w.name+'” hisobini barcha yozuvlari bilan qayta ochasizmi?'))return;
    try{await directAccountOp('workspace_restore',state.active,{target_workspace_id:w.id,confirm:'TIKLA'});alertMessage('Hisob tiklandi.',true);}
