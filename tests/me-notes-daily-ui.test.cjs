@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const read=p=>fs.readFileSync(p,'utf8');
 const finance=read('me-notes-sahifalab/finance-unified.html');
 const controller=read('me-notes-sahifalab/finance-unified.js');
-const diary=read('me-notes-sahifalab/index.html');
+const diary=read('me-notes-sahifalab/sahifalab-archive.html');
 const chat=read('me-notes-bot/server.cjs');
 test('Production home has no beta badge and retains four finance tabs',()=>{
  assert.doesNotMatch(finance,/Yagona moliya · Sinov/);
@@ -44,7 +44,7 @@ test('Sahifalab lesson content preserved and daily landing concise',()=>{
 });
 test('Telegram /start is concise while detailed reference stays in /yordam',()=>{
  assert.doesNotMatch(chat,/Mini App \(sinov\)/);
- assert.match(chat,/if\(command==='\/start'\)\{await send\(chat_id,'📒 ME Notes/);
+ assert.match(chat,/if\(command==='\/start'\)\{/);\n assert.match(chat,/📒 ME Notes\\n📂 Hisob:/);
  assert.match(chat,/if\(command==='\/yordam'/);
  assert.match(chat,/25 ming taksi\\ntushlik 35000/);
  assert.doesNotMatch(chat,/Eski offline moliya sahifasi alohida/);
