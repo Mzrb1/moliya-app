@@ -46,27 +46,29 @@ const send=(chat_id,text,extra={})=>api('sendMessage',{chat_id,text,...extra});
 async function ensure(uid){
  uid=String(uid);
  await db.execute({sql:'INSERT OR IGNORE INTO mn_users(uid) VALUES(?)',args:[uid]});
- let q=await db.execute({sql:'SELECT active FROM mn_users WHERE uid=?',args:[uid]});
- if(!q.rows[0]?.active){
-  const id=randomUUID();
-  await db.batch([
-   {sql:'INSERT INTO mn_workspaces(id,uid,kind,name,created) VALUES(?,?,?,?,?)',args:[id,uid,'personal',F.KINDS.personal,new Date().toISOString()]},
-   {sql:'UPDATE mn_users SET active=COALESCE(active,?) WHERE uid=?',args:[id,uid]}
-  ],'write');
+ const existing=await db.execute({sql:"SELECT w.id FROM mn_workspaces w WHERE w.uid=? AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY w.created,w.id LIMIT 1",args:[uid]});
+ if(!existing.rows.length){
+  // Atomic INSERT ... SELECT prevents duplicate default workspaces from webhook retries.
+  const id=randomUUID(),now=new Date().toISOString();
+  await db.execute({sql:"INSERT INTO mn_workspaces(id,uid,kind,name,created) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM mn_workspaces w WHERE w.uid=? AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id))",
+   args:[id,uid,'personal',F.KINDS.personal,now,uid]});
  }
+ const activeRows=await db.execute({sql:"SELECT w.id FROM mn_workspaces w WHERE w.uid=? AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY w.created,w.id",args:[uid]});
+ if(!activeRows.rows.length)throw Error('Hisobni ochib bo‘lmadi');
+ const current=await db.execute({sql:"SELECT u.active FROM mn_users u JOIN mn_workspaces w ON w.id=u.active AND w.uid=u.uid WHERE u.uid=? AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id)",args:[uid]});
+ if(!current.rows.length)await db.execute({sql:'UPDATE mn_users SET active=? WHERE uid=?',args:[activeRows.rows[0].id,uid]});
  return uid;
 }
 async function active(uid){
- const q=await db.execute({sql:'SELECT w.id,w.kind,w.name FROM mn_users u JOIN mn_workspaces w ON u.active=w.id WHERE u.uid=? AND w.uid=?',args:[uid,uid]});
+ const q=await db.execute({sql:'SELECT w.id,w.kind,w.name FROM mn_users u JOIN mn_workspaces w ON u.active=w.id WHERE u.uid=? AND w.uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id)',args:[uid,uid]});
  return q.rows[0];
 }
 async function choose(uid){
- const q=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? ORDER BY created',args:[uid]});
+ const q=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces w WHERE uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY created,id',args:[uid]});
  return {inline_keyboard:[
   [{text:'📱 Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}}],
-  ...q.rows.map(w=>[{text:w.name+' ('+F.KINDS[w.kind]+')',callback_data:'use:'+w.id}]),
-  [{text:'➕ Shaxsiy',callback_data:'new:personal'},{text:'➕ Oilaviy',callback_data:'new:family'}],
-  [{text:'➕ Biznes',callback_data:'new:business'}]
+  ...q.rows.map((w,i)=>[{text:(i+1)+'. '+w.name+' · '+F.KINDS[w.kind],callback_data:'use:'+w.id}]),
+  [{text:'⚙️ Hisob ochish / boshqarish',web_app:{url:FINANCE_MINI_APP_URL}}]
  ]};
 }
 const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 mln oylik\n\n'+
@@ -261,21 +263,15 @@ async function handleCallback(update){
  await api('answerCallbackQuery',{callback_query_id:cb.id});
  if(cmd.startsWith('use:')){
   const id=cmd.slice(4);
-  const q=await db.execute({sql:'SELECT id,name FROM mn_workspaces WHERE id=? AND uid=?',args:[id,uid]});
+  const q=await db.execute({sql:'SELECT id,name FROM mn_workspaces w WHERE id=? AND uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id)',args:[id,uid]});
   if(!q.rows.length)return;
   await db.execute({sql:'UPDATE mn_users SET active=? WHERE uid=?',args:[id,uid]});
   await send(cb.message.chat.id,'✅ Tanlangan hisob: '+q.rows[0].name);
  }
  if(cmd.startsWith('new:')){
-  const kind=cmd.slice(4);if(!F.KINDS[kind])return;
-  const q=await db.execute({sql:'SELECT COUNT(*) AS count FROM mn_workspaces WHERE uid=?',args:[uid]});
-  if(Number(q.rows[0].count)>=12){await send(cb.message.chat.id,'12 tadan ortiq hisob ochilmaydi.');return;}
-  const id=randomUUID(),name=F.KINDS[kind];
-  await db.batch([
-   {sql:'INSERT INTO mn_workspaces(id,uid,kind,name,created) VALUES(?,?,?,?,?)',args:[id,uid,kind,name,new Date().toISOString()]},
-   {sql:'UPDATE mn_users SET active=? WHERE uid=?',args:[id,uid]}
-  ],'write');
-  await send(cb.message.chat.id,'✅ Yangi hisob ochildi: '+name+'\nYozuvlar shu hisobga tushadi.');
+  // Old Telegram messages may contain obsolete quick-create callback buttons.
+  // Never create duplicate accounts from stale messages.
+  await send(cb.message.chat.id,'Yangi hisob ochish va mavjudlarini boshqarish uchun /start → Moliya boshqaruvi → Hisoblarni boshqarish bo‘limiga kiring.');
  }
 }
 async function main(){
