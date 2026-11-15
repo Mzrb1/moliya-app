@@ -35,3 +35,11 @@ test('All finance JS references resolve to unique HTML IDs',()=>{
  assert.equal(new Set(ids).size,ids.length);
  for(const [,id] of js.matchAll(/\$\('([^']+)'\)/g))assert.ok(ids.includes(id),'Missing ID: '+id);
 });
+
+test('Account manager shows unique short IDs for duplicate old names and archives remain recoverable',()=>{
+ assert.match(js,/w\.id\.slice\(-6\)/);
+ assert.match(js,/state\.archived=data\.archived\|\|\[\]/);
+ assert.match(js,/state\.archived=cache\.archived\|\|\[\]/);
+ assert.match(js,/workspace_archive/);
+ assert.match(js,/workspace_restore/);
+});
