@@ -320,7 +320,7 @@ function makeFinanceApi({db,botToken,ensure}){
    steps.push({sql:'DELETE FROM mn_closed_months WHERE workspace_id=? AND uid=? AND month=?',args:[wid,uid,month]});
    result={month,reopened:true};
   }else if(action==='workspace_rename'){
-   const name=String(body.name||'').trim().replace(/\\s+/g,' ');
+   const name=String(body.name||'').trim().replace(/\s+/g,' ');
    if(name.length<2||name.length>60)throw Error('Hisob nomi 2–60 belgidan iborat bo‘lsin');
    const duplicate=await db.execute({sql:"SELECT id FROM mn_workspaces WHERE uid=? AND lower(name)=lower(?) AND id<>? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=mn_workspaces.id) LIMIT 1",args:[uid,name,wid]});
    if(duplicate.rows.length)throw Error('Bunday nomli boshqa hisob bor');
@@ -341,6 +341,8 @@ function makeFinanceApi({db,botToken,ensure}){
    if(body.confirm!=='TIKLA'||typeof target!=='string'||target.length>128)throw Error('Tiklash ma’lumotlari noto‘g‘ri');
    const archived=await db.execute({sql:"SELECT w.id FROM mn_workspaces w JOIN mn_workspace_archive a ON a.workspace_id=w.id WHERE w.id=? AND w.uid=? AND a.uid=?",args:[target,uid,uid]});
    if(!archived.rows.length)throw Error('Tiklanadigan hisob topilmadi');
+   const duplicate=await db.execute({sql:"SELECT id FROM mn_workspaces WHERE uid=? AND id<>? AND lower(name)=(SELECT lower(name) FROM mn_workspaces WHERE id=?) AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=mn_workspaces.id) LIMIT 1",args:[uid,target,target]});
+   if(duplicate.rows.length)throw Error('Bir xil nomli faol hisob mavjud. Avval unga boshqa nom bering');
    const count=await db.execute({sql:"SELECT COUNT(*) AS n FROM mn_workspaces w WHERE uid=? AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id)",args:[uid]});
    if(Number(count.rows[0].n)>=12)throw Error('12 tadan ko‘p faol hisob bo‘lishi mumkin emas');
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
@@ -350,7 +352,7 @@ function makeFinanceApi({db,botToken,ensure}){
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
    steps.push({sql:'UPDATE mn_users SET active=? WHERE uid=?',args:[wid,uid]});
   }else if(action==='new_workspace'){
-   const kind=body.new_kind,name=String(body.name||'').trim().replace(/\\s+/g,' ').slice(0,60);
+   const kind=body.new_kind,name=String(body.name||'').trim().replace(/\s+/g,' ').slice(0,60);
    if(!F.KINDS[kind])throw Error('Hisob turi noto‘g‘ri');
    const display=name||F.KINDS[kind];
    if(display.length<2||display.length>60)throw Error('Hisob nomi noto‘g‘ri');
