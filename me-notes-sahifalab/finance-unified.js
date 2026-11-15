@@ -6,7 +6,7 @@ const tg=window.Telegram?.WebApp||null;
 const initData=String(tg?.initData||'');
 const cacheUid=String(tg?.initDataUnsafe?.user?.id||'');
 const CACHE_KEY='me_notes_unified_cache_'+cacheUid,QUEUE_KEY='me_notes_unified_queue_'+cacheUid;
-const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),seenToday:F.today().slice(0,7),views:'home',base:{},queue:[],months:[],online:false,storageOK:true,busy:false};
+const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),seenToday:F.today().slice(0,7),views:'home',base:{},queue:[],months:[],archived:[],online:false,storageOK:true,busy:false};
 let legacyBackup=null;
 let editingId=null;
 function el(tag,cls,text){const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x;}
@@ -19,7 +19,7 @@ function restore(){
  try{
   const cache=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
   if(cache&&typeof cache==='object'&&Array.isArray(cache.workspaces)&&cache.base&&typeof cache.base==='object'){
-   state.workspaces=cache.workspaces;state.active=cache.active;state.base=cache.base;
+   state.workspaces=cache.workspaces;state.active=cache.active;state.base=cache.base;state.archived=cache.archived||[];
   }
   const pending=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');
   if(!Array.isArray(pending)||pending.length>3000)throw Error('Navbat ma’lumoti noto‘g‘ri');
@@ -28,7 +28,7 @@ function restore(){
 }
 function save(){
  if(!state.storageOK)throw Error('Mahalliy xotira ishlamayapti');
- localStorage.setItem(CACHE_KEY,JSON.stringify({workspaces:state.workspaces,active:state.active,base:state.base}));
+ localStorage.setItem(CACHE_KEY,JSON.stringify({workspaces:state.workspaces,active:state.active,base:state.base,archived:state.archived}));
  localStorage.setItem(QUEUE_KEY,JSON.stringify(state.queue));
 }
 const key=()=>state.active+'|'+state.month;
@@ -93,7 +93,7 @@ async function request(path,options={}){
 }
 async function fetchWorkspaces(){
  const data=await request('/workspaces');
- state.workspaces=data.workspaces;state.active=data.active||data.workspaces[0]?.id||null;
+ state.workspaces=data.workspaces;state.archived=data.archived||[];state.active=data.active||data.workspaces[0]?.id||null;
  save();
 }
 async function fetchLedger(){
@@ -414,6 +414,70 @@ async function restoreMonthReset(){
  }
 }
 
+
+function accountNodeButton(label,cls,handler,disabled=false){
+ const button=el('button','btn '+cls,label);
+ button.type='button';button.disabled=disabled;button.onclick=handler;
+ return button;
+}
+async function directAccountOp(action,wid,extra={}){
+ if(!state.online||!navigator.onLine)throw Error('Hisobni boshqarish uchun internetga ulaning');
+ if(state.busy||state.queue.length)throw Error('Avval barcha yozuvlarni sinxronlang');
+ const op={op_id:'web_'+crypto.randomUUID(),workspace_id:wid||state.active,action,...extra};
+ await request('/op',{method:'POST',body:op});
+ // Server is the only source of truth. Never remove cached ledger records.
+ await fetchWorkspaces();
+ state.months=[];
+ await Promise.all([fetchLedger(),fetchMonthHistory()]);
+ closeEdit();render();
+ return true;
+}
+function renderAccounts(){
+ const active=$('active-accounts'),archived=$('archived-accounts');
+ active.replaceChildren();archived.replaceChildren();
+ const managerOpen=!$('account-manager').classList.contains('hidden');
+ if(!managerOpen)return;
+ const list=state.workspaces||[];
+ for(const w of list){
+  const row=el('div','account-row'),main=el('div','account-detail'),actions=el('div','account-actions');
+  main.append(el('div','strong',w.name+(w.id===state.active?' · Faol':'')));
+  main.append(el('div','tiny',F.KINDS[w.kind]+' · '+Number(w.records||0)+' ta yozuv · ID '+w.id.slice(-6)));
+  actions.append(
+   accountNodeButton('Nomini o‘zgartirish','alt',async()=>{
+    const name=prompt('Hisobning yangi nomi (2–60 belgi):',w.name);
+    if(name===null)return;
+    const clean=name.trim().replace(/\s+/g,' ');
+    if(clean===w.name)return;
+    if(clean.length<2||clean.length>60){alertMessage('Hisob nomi 2–60 belgi bo‘lsin');return;}
+    try{await directAccountOp('workspace_rename',w.id,{name:clean});alertMessage('Hisob nomi yangilandi.',true);}
+    catch(e){alertMessage('Nomini o‘zgartirib bo‘lmadi: '+e.message);}
+   }),
+   accountNodeButton('Yopish','warning',async()=>{
+    if(list.length===1){alertMessage('Oxirgi hisobni yopib bo‘lmaydi');return;}
+    const typed=prompt('“'+w.name+'” hisobini yopish uchun uning nomini aynan kiriting. Yozuvlar saqlanadi.');
+    if(typed===null)return;
+    if(typed.trim()!==w.name){alertMessage('Hisob nomi mos kelmadi. Hech narsa o‘zgarmadi.');return;}
+    if(!confirm('“'+w.name+'” hisobini yopsangiz, u ro‘yxatdan yashiriladi. Barcha yozuvlar va limitlar saqlanadi. Davom etasizmi?'))return;
+    try{await directAccountOp('workspace_archive',w.id,{confirm:'YOP'});alertMessage('Hisob yopildi. “Yopilgan hisoblar”dan tiklash mumkin.',true);}
+    catch(e){alertMessage('Hisob yopilmadi: '+e.message);}
+   },list.length===1)
+  );
+  row.append(main,actions);active.append(row);
+ }
+ if(!state.archived.length)archived.append(el('p','tiny','Hozircha yopilgan hisob yo‘q.'));
+ for(const w of state.archived){
+  const row=el('div','account-row'),main=el('div','account-detail'),actions=el('div','account-actions');
+  main.append(el('div','strong',w.name));
+  main.append(el('div','tiny',F.KINDS[w.kind]+' · '+Number(w.records||0)+' ta yozuv saqlangan · ID '+w.id.slice(-6)));
+  actions.append(accountNodeButton('Qayta ochish','alt',async()=>{
+   if(!confirm('“'+w.name+'” hisobini barcha yozuvlari bilan qayta ochasizmi?'))return;
+   try{await directAccountOp('workspace_restore',state.active,{target_workspace_id:w.id,confirm:'TIKLA'});alertMessage('Hisob tiklandi.',true);}
+   catch(e){alertMessage('Tiklab bo‘lmadi: '+e.message);}
+  }));
+  row.append(main,actions);archived.append(row);
+ }
+}
+
 function render(){
  const w=current(),data=compute();
  $('app').classList.toggle('hidden',!w);
@@ -422,6 +486,7 @@ function render(){
   const o=el('option');o.value=x.id;o.textContent=x.name+' · '+F.KINDS[x.kind];return o;
  }));selector.value=state.active;
  $('account-kind').textContent=F.KINDS[w.kind];
+ renderAccounts();
  $('month').value=state.month;
  if(!data)return;
  $('net').textContent=money(data.summary.net);
@@ -535,10 +600,13 @@ function setup(){
  document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('click',()=>chooseView(btn.dataset.view)));
  $('open-settings').onclick=()=>chooseView('settings');
  $('month').onchange=()=>changeMonth($('month').value);
- $('workspace').onchange=()=>{
-  state.active=$('workspace').value;state.months=[];closeEdit();
-  try{enqueue({action:'switch'});Promise.all([fetchLedger(),fetchMonthHistory()]).then(render).catch(e=>alertMessage(e.message));}
-  catch(e){alertMessage(e.message);}
+ $('workspace').onchange=async()=>{
+  const to=$('workspace').value,old=state.active;
+  if(to===old)return;
+  try{
+   await directAccountOp('switch',to);
+   alertMessage('Hisob almashtirildi.',true);
+  }catch(e){state.active=old;render();alertMessage('Hisobni almashtirib bo‘lmadi: '+e.message);}
  };
  $('quick-text').addEventListener('input',showPreview);
  $('quick-form').onsubmit=e=>{
@@ -613,13 +681,26 @@ function setup(){
    alertMessage('Kalit so‘z qo‘shish navbatida.',true);
   }catch(err){alertMessage(err.message);}
  };
- $('new-account').onclick=()=>{$('account-form').classList.toggle('hidden');};
- $('account-form').onsubmit=e=>{
+ $('manage-accounts').onclick=()=>{
+  const show=$('account-manager').classList.toggle('hidden')===false;
+  $('manage-accounts').setAttribute('aria-expanded',show?'true':'false');
+  renderAccounts();
+ };
+ $('new-account').onclick=()=>{
+  const show=$('account-form').classList.toggle('hidden')===false;
+  $('new-account').textContent=show?'Bekor':'+ Hisob ochish';
+ };
+ $('account-form').onsubmit=async e=>{
   e.preventDefault();
-  if(state.queue.length){alertMessage('Hisob ochishdan oldin navbatdagi yozuvlarni sinxronlang.');return;}
-  const kind=$('account-type').value,name=$('account-name').value.trim();
-  try{enqueue({action:'new_workspace',new_kind:kind,name:name.slice(0,60)});$('account-form').classList.add('hidden');$('account-name').value='';}
-  catch(err){alertMessage(err.message);}
+  const kind=$('account-type').value,name=$('account-name').value.trim().replace(/\s+/g,' ');
+  const button=$('create-account-submit');
+  button.disabled=true;
+  try{
+   await directAccountOp('new_workspace',state.active,{new_kind:kind,name});
+   $('account-form').classList.add('hidden');$('account-name').value='';$('new-account').textContent='+ Hisob ochish';
+   alertMessage('Yangi hisob ochildi.',true);
+  }catch(err){alertMessage('Hisob ochilmadi: '+err.message);}
+  finally{button.disabled=false;}
  };
  $('detect-legacy').onclick=()=>{
   try{

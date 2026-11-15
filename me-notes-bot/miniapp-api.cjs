@@ -57,11 +57,12 @@ function makeFinanceApi({db,botToken,ensure}){
   'CREATE TABLE IF NOT EXISTS mn_closed_months (workspace_id TEXT NOT NULL, uid TEXT NOT NULL, month TEXT NOT NULL, closed_at TEXT NOT NULL, PRIMARY KEY(workspace_id,month))',
   'CREATE TABLE IF NOT EXISTS mn_month_reset_meta (id TEXT PRIMARY KEY,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,month TEXT NOT NULL,created TEXT NOT NULL,restored_at TEXT)',
   'CREATE TABLE IF NOT EXISTS mn_month_reset_tx (reset_id TEXT NOT NULL,id TEXT NOT NULL,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,update_id INTEGER NOT NULL,kind TEXT NOT NULL,category TEXT NOT NULL,amount INTEGER NOT NULL,note TEXT,day TEXT NOT NULL,created TEXT NOT NULL,PRIMARY KEY(reset_id,id))',
-  'CREATE TABLE IF NOT EXISTS mn_month_reset_budget (reset_id TEXT NOT NULL,workspace_id TEXT NOT NULL,month TEXT NOT NULL,category TEXT NOT NULL,limit_amount INTEGER NOT NULL,PRIMARY KEY(reset_id,category))'
+  'CREATE TABLE IF NOT EXISTS mn_month_reset_budget (reset_id TEXT NOT NULL,workspace_id TEXT NOT NULL,month TEXT NOT NULL,category TEXT NOT NULL,limit_amount INTEGER NOT NULL,PRIMARY KEY(reset_id,category))',
+  'CREATE TABLE IF NOT EXISTS mn_workspace_archive (workspace_id TEXT PRIMARY KEY,uid TEXT NOT NULL,archived_at TEXT NOT NULL)'
  ],'write');
  }
  async function owned(uid,wid){
-  const r=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? AND id=?',args:[uid,wid]});
+  const r=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? AND id=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=mn_workspaces.id)',args:[uid,wid]});
   if(!r.rows.length)throw forbidden('Bu hisobga kirishga ruxsat yo‘q');
   return r.rows[0];
  }
@@ -130,11 +131,16 @@ function makeFinanceApi({db,botToken,ensure}){
    income:Number(rows.rows[0].income),expense:Number(rows.rows[0].expense),budgets:Number(budgets.rows[0].n)};
  }
  async function workspaces(uid){
-  const [ws,user]=await Promise.all([
-   db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? ORDER BY created,id',args:[uid]}),
+  const [ws,arch,user]=await Promise.all([
+   db.execute({sql:"SELECT w.id,w.kind,w.name,(SELECT COUNT(*) FROM mn_transactions t WHERE t.uid=? AND t.workspace_id=w.id) AS records FROM mn_workspaces w WHERE w.uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY w.created,w.id",args:[uid,uid]}),
+   db.execute({sql:"SELECT w.id,w.kind,w.name,a.archived_at,(SELECT COUNT(*) FROM mn_transactions t WHERE t.uid=? AND t.workspace_id=w.id) AS records FROM mn_workspaces w JOIN mn_workspace_archive a ON a.workspace_id=w.id WHERE w.uid=? AND a.uid=? ORDER BY a.archived_at DESC",args:[uid,uid,uid]}),
    db.execute({sql:'SELECT active FROM mn_users WHERE uid=?',args:[uid]})
   ]);
-  return {workspaces:ws.rows.map(w=>({id:w.id,kind:w.kind,name:w.name})),active:user.rows[0]?.active||null};
+  const activeList=ws.rows.map(w=>({id:String(w.id),kind:w.kind,name:String(w.name),records:Number(w.records)}));
+  const archivedList=arch.rows.map(w=>({id:String(w.id),kind:w.kind,name:String(w.name),archived_at:String(w.archived_at),records:Number(w.records)}));
+  const requested=String(user.rows[0]?.active||'');
+  return {workspaces:activeList,archived:archivedList,
+    active:activeList.some(w=>w.id===requested)?requested:(activeList[0]?.id||null)};
  }
  async function ledger(uid,wid,month){
   const w=await owned(uid,wid);
@@ -158,7 +164,7 @@ function makeFinanceApi({db,botToken,ensure}){
  async function execute(uid,body){
   const opId=body?.op_id,wid=body?.workspace_id,action=body?.action;
   if(!validId(opId)||typeof wid!=='string'||wid.length>128)throw Error('Amal ID yoki hisob noto‘g‘ri');
-  if(!['add','add_many','budget','delete','edit','switch','new_workspace','import','category_add','category_delete','keyword_add','keyword_delete','month_close','month_reopen','month_clear','month_unclear'].includes(action))throw Error('Amal turi noto‘g‘ri');
+  if(!['add','add_many','budget','delete','edit','switch','new_workspace','import','category_add','category_delete','keyword_add','keyword_delete','month_close','month_reopen','month_clear','month_unclear','workspace_rename','workspace_archive','workspace_restore'].includes(action))throw Error('Amal turi noto‘g‘ri');
   const previous=await db.execute({sql:'SELECT uid FROM mn_api_ops WHERE id=?',args:[opId]});
   if(previous.rows.length){
    if(previous.rows[0].uid!==uid)throw forbidden('Amal boshqa foydalanuvchiga tegishli');
@@ -313,17 +319,50 @@ function makeFinanceApi({db,botToken,ensure}){
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
    steps.push({sql:'DELETE FROM mn_closed_months WHERE workspace_id=? AND uid=? AND month=?',args:[wid,uid,month]});
    result={month,reopened:true};
+  }else if(action==='workspace_rename'){
+   const name=String(body.name||'').trim().replace(/\s+/g,' ');
+   if(name.length<2||name.length>60)throw Error('Hisob nomi 2–60 belgidan iborat bo‘lsin');
+   const duplicate=await db.execute({sql:"SELECT id FROM mn_workspaces WHERE uid=? AND lower(name)=lower(?) AND id<>? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=mn_workspaces.id) LIMIT 1",args:[uid,name,wid]});
+   if(duplicate.rows.length)throw Error('Bunday nomli boshqa hisob bor');
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   steps.push({sql:'UPDATE mn_workspaces SET name=? WHERE id=? AND uid=?',args:[name,wid,uid]});
+   result={renamed:name};
+  }else if(action==='workspace_archive'){
+   if(body.confirm!=='YOP')throw Error('Hisobni yopish uchun YOP deb tasdiqlang');
+   const others=await db.execute({sql:"SELECT id FROM mn_workspaces w WHERE uid=? AND id<>? AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY created,id LIMIT 1",args:[uid,wid]});
+   if(!others.rows.length)throw Error('Oxirgi faol hisobni yopib bo‘lmaydi');
+   const nextId=String(others.rows[0].id);
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   steps.push({sql:'INSERT INTO mn_workspace_archive(workspace_id,uid,archived_at) VALUES(?,?,?)',args:[wid,uid,now]});
+   steps.push({sql:'UPDATE mn_users SET active=? WHERE uid=? AND active=?',args:[nextId,uid,wid]});
+   result={archived:wid,active:nextId};
+  }else if(action==='workspace_restore'){
+   const target=body.target_workspace_id;
+   if(body.confirm!=='TIKLA'||typeof target!=='string'||target.length>128)throw Error('Tiklash ma’lumotlari noto‘g‘ri');
+   const archived=await db.execute({sql:"SELECT w.id FROM mn_workspaces w JOIN mn_workspace_archive a ON a.workspace_id=w.id WHERE w.id=? AND w.uid=? AND a.uid=?",args:[target,uid,uid]});
+   if(!archived.rows.length)throw Error('Tiklanadigan hisob topilmadi');
+   const duplicate=await db.execute({sql:"SELECT id FROM mn_workspaces WHERE uid=? AND id<>? AND lower(name)=(SELECT lower(name) FROM mn_workspaces WHERE id=?) AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=mn_workspaces.id) LIMIT 1",args:[uid,target,target]});
+   if(duplicate.rows.length)throw Error('Bir xil nomli faol hisob mavjud. Avval unga boshqa nom bering');
+   const count=await db.execute({sql:"SELECT COUNT(*) AS n FROM mn_workspaces w WHERE uid=? AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id)",args:[uid]});
+   if(Number(count.rows[0].n)>=12)throw Error('12 tadan ko‘p faol hisob bo‘lishi mumkin emas');
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   steps.push({sql:'DELETE FROM mn_workspace_archive WHERE workspace_id=? AND uid=?',args:[target,uid]});
+   result={restored:target};
   }else if(action==='switch'){
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
    steps.push({sql:'UPDATE mn_users SET active=? WHERE uid=?',args:[wid,uid]});
   }else if(action==='new_workspace'){
-   const kind=body.new_kind,name=String(body.name||'').trim().slice(0,60);
+   const kind=body.new_kind,name=String(body.name||'').trim().replace(/\s+/g,' ').slice(0,60);
    if(!F.KINDS[kind])throw Error('Hisob turi noto‘g‘ri');
-   const count=await db.execute({sql:'SELECT COUNT(*) AS n FROM mn_workspaces WHERE uid=?',args:[uid]});
-   if(Number(count.rows[0].n)>=12)throw Error('12 tadan ortiq hisob ochilmaydi');
+   const display=name||F.KINDS[kind];
+   if(display.length<2||display.length>60)throw Error('Hisob nomi noto‘g‘ri');
+   const count=await db.execute({sql:"SELECT COUNT(*) AS n FROM mn_workspaces w WHERE uid=? AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id)",args:[uid]});
+   if(Number(count.rows[0].n)>=12)throw Error('12 tadan ortiq faol hisob ochilmaydi');
+   const duplicate=await db.execute({sql:"SELECT id FROM mn_workspaces w WHERE uid=? AND lower(name)=lower(?) AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) LIMIT 1",args:[uid,display]});
+   if(duplicate.rows.length)throw Error('Bunday hisob allaqachon mavjud. Hisoblar ro‘yxatidan tanlang');
    const id=randomUUID();
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
-   steps.push({sql:'INSERT INTO mn_workspaces(id,uid,kind,name,created) VALUES(?,?,?,?,?)',args:[id,uid,kind,name||F.KINDS[kind],now]});
+   steps.push({sql:'INSERT INTO mn_workspaces(id,uid,kind,name,created) VALUES(?,?,?,?,?)',args:[id,uid,kind,display,now]});
    steps.push({sql:'UPDATE mn_users SET active=? WHERE uid=?',args:[id,uid]});
    result={workspace_id:id};
   }
@@ -369,6 +408,6 @@ function makeFinanceApi({db,botToken,ensure}){
    json(res,404,{ok:false,error:'API topilmadi'},headers);return true;
   }catch(e){respondError(res,e,headers);return true;}
  }
- return {init,handle,ledger,execute,preferences,monthHistory,exportMonth,closed,resetBackup};
+ return {init,handle,ledger,execute,preferences,monthHistory,exportMonth,closed,resetBackup,workspaces};
 }
 module.exports={makeFinanceApi,prepareEntries,updateId,ORIGIN};
