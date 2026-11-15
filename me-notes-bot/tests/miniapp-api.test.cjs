@@ -431,7 +431,7 @@ test('Renaming accounts keeps identity, changes only target and blocks duplicate
  const ws=await api.workspaces('111');
  assert.equal(ws.workspaces.find(x=>x.id===account).name,'Savdo');
  // These names can differ from the original default; test a literal active name as well.
- await assert.rejects(()=>api.execute('111',{op_id:'ws_rename_existing_111',workspace_id:account,action:'workspace_rename',name:'Shaxsiy moliyam'}),/nomli boshqa/);
+ await assert.rejects(()=>api.execute('111',{op_id:'ws_rename_existing_111',workspace_id:account,action:'workspace_rename',name:'Shaxsiy'}),/nomli boshqa/);
  db.close();
 });
 test('Archived account cannot be restored by another user',async()=>{
