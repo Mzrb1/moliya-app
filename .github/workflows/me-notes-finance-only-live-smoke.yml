@@ -1,0 +1,54 @@
+name: ME Notes Finance-only Live Smoke
+on:
+  push:
+    branches:
+      - qa/me-notes-finance-only-live-20261115
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check finance entry and safe archived diary
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          const site='https://me-notes-sahifalab.onrender.com';
+          const chat='https://me-notes-chat-test.onrender.com';
+          async function get(path){
+           let last;
+           for(let i=0;i<4;i++){
+             try{
+              const res=await fetch(path,{signal:AbortSignal.timeout(25000)});
+              if(res.status>=500&&i<3){await new Promise(r=>setTimeout(r,1000));continue;}
+              return res;
+             }catch(e){last=e;await new Promise(r=>setTimeout(r,1000));}
+           }
+           throw last;
+          }
+          (async()=>{
+            const health=await get(chat+'/health');
+            assert.equal(health.status,200);
+            const root=await get(site+'/');
+            assert.equal(root.status,200);
+            const landing=await root.text();
+            assert.ok(landing.includes('<title>ME Notes — Moliya boshqaruvi</title>'));
+            assert.ok(landing.includes('https://t.me/ME_notes_bot'));
+            assert.ok(!landing.includes('data-tab="lessons"'));
+            const finance=await get(site+'/finance-unified.html');
+            assert.equal(finance.status,200);
+            const financial=await finance.text();
+            assert.ok(financial.includes('id="view-budget"'));
+            assert.ok(!financial.includes('href="index.html"'));
+            const archive=await get(site+'/sahifalab-archive.html');
+            assert.equal(archive.status,200);
+            const diary=await archive.text();
+            assert.ok(diary.includes("const STORE='moliyaviy_kundalik_sahifalab_v1'"));
+            assert.ok(diary.includes('id="export-json"'));
+            console.log('PASS: finance-only landing + Mini App + intact hidden diary backup + bot health');
+          })().catch(e=>{console.error(e.stack||e);process.exitCode=1;});
+          NODE
