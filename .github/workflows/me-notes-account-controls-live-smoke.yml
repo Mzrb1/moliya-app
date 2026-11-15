@@ -1,0 +1,45 @@
+name: ME Notes Account Controls Live Smoke
+on:
+  push:
+    branches: [qa/me-notes-workspaces-live-20261115]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Live UI and auth smoke
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          const base='https://me-notes-sahifalab.onrender.com';
+          const api='https://me-notes-chat-test.onrender.com';
+          async function retry(url,opts={}){
+            let last;for(let i=0;i<4;i++){
+              try{const r=await fetch(url,{...opts,signal:AbortSignal.timeout(25000)});
+                if(r.status>=500&&i<3){await new Promise(resolve=>setTimeout(resolve,1300));continue;}
+                return r;
+              }catch(e){last=e;await new Promise(resolve=>setTimeout(resolve,1300));}
+            }throw last;
+          }
+          (async()=>{
+            const [health,page,script,auth]=await Promise.all([
+              retry(api+'/health'),
+              retry(base+'/finance-unified.html'),
+              retry(base+'/finance-unified.js'),
+              retry(api+'/api/v1/workspaces')
+            ]);
+            assert.equal(health.status,200);
+            assert.equal(page.status,200);
+            assert.equal(script.status,200);
+            assert.equal(auth.status,401);
+            const html=await page.text(),js=await script.text();
+            for(const id of ['manage-accounts','active-accounts','archived-accounts','account-form'])
+              assert.ok(html.includes('id="'+id+'"'),id);
+            for(const action of ['workspace_rename','workspace_archive','workspace_restore'])
+              assert.ok(js.includes(action),action);
+            assert.ok(!html.includes('href="index.html"'));
+            console.log('PASS: deployed account management controls, finance-only navigation, secure API auth');
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          NODE
