@@ -1,5 +1,5 @@
 'use strict';
-// ME Notes: Telegram chat backend (separate from Sahifalab lesson data).
+// ME Notes: Telegram financial management backend.
 // Secrets required at runtime: BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET,
 // TURSO_DATABASE_URL, TURSO_AUTH_TOKEN.
 const http=require('node:http');
@@ -40,6 +40,8 @@ async function api(method,params){
  if(!res.ok||!x.ok)throw Error('Telegram '+method+' status '+res.status);
  return x.result;
 }
+const FINANCE_MINI_APP_URL='https://me-notes-sahifalab.onrender.com/finance-unified.html';
+const financeMenuButton=()=>({type:'web_app',text:'Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}});
 const send=(chat_id,text,extra={})=>api('sendMessage',{chat_id,text,...extra});
 async function ensure(uid){
  uid=String(uid);
@@ -61,7 +63,7 @@ async function active(uid){
 async function choose(uid){
  const q=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? ORDER BY created',args:[uid]});
  return {inline_keyboard:[
-  [{text:'📱 Moliya boshqaruvi',web_app:{url:'https://me-notes-sahifalab.onrender.com/finance-unified.html'}}],
+  [{text:'📱 Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}}],
   ...q.rows.map(w=>[{text:w.name+' ('+F.KINDS[w.kind]+')',callback_data:'use:'+w.id}]),
   [{text:'➕ Shaxsiy',callback_data:'new:personal'},{text:'➕ Oilaviy',callback_data:'new:family'}],
   [{text:'➕ Biznes',callback_data:'new:business'}]
@@ -183,7 +185,11 @@ async function handleMessage(update){
  if(!m||m.chat?.type!=='private'||m.chat.id!==m.from?.id||typeof m.text!=='string')return;
  const uid=await ensure(m.from.id),w=await active(uid),chat_id=m.chat.id;
  const text=m.text.trim(),command=text.split(/\s+/)[0].replace(/@[\w]+$/,'').toLowerCase();
- if(command==='/start'){await send(chat_id,'📒 ME Notes\n📂 Hisob: '+w.name+'\nXarajat: 25 ming taksi\nBuyruqlar: /yordam',{reply_markup:await choose(uid)});return;}
+ if(command==='/start'){
+  try{await api('setChatMenuButton',{chat_id,menu_button:financeMenuButton()});}
+  catch(e){console.error('ME Notes chat menu setup failed:',String(e.message).slice(0,100));}
+  await send(chat_id,'📒 ME Notes\n📂 Hisob: '+w.name+'\nXarajat: 25 ming taksi\nBuyruqlar: /yordam',{reply_markup:await choose(uid)});return;
+ }
  if(command==='/hisob'){await send(chat_id,'Hozirgi hisob: '+w.name+'\nHisobni tanlang:',{reply_markup:await choose(uid)});return;}
  if(command==='/yordam'||command==='/help'){await send(chat_id,help);return;}
  if(command==='/taqsimot'||command==='/hisobot'){
@@ -303,6 +309,10 @@ async function main(){
       secret_token:secret,allowed_updates:['message','callback_query'],drop_pending_updates:false});
     console.log('Telegram webhook installed by explicit AUTO_SET_WEBHOOK flag');
    }catch(err){console.error('Telegram webhook setup failed:',String(err.message).slice(0,120));}
+   try{
+    await api('setChatMenuButton',{menu_button:financeMenuButton()});
+    console.log('ME Notes default menu is finance Mini App');
+   }catch(err){console.error('ME Notes default menu setup failed:',String(err.message).slice(0,120));}
   }
  });
 }

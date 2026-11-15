@@ -51,7 +51,7 @@ test('Invalid month is rejected, not silently treated as all months',()=>{
 });
 test('Diary and finance remain two independent entry points',()=>{
  const fs=require('node:fs');
- const d=fs.readFileSync('me-notes-sahifalab/index.html','utf8');
+ const d=fs.readFileSync('me-notes-sahifalab/sahifalab-archive.html','utf8');
  const f=fs.readFileSync('me-notes-sahifalab/finance-unified.html','utf8');
  assert.ok(d.includes("const STORE='moliyaviy_kundalik_sahifalab_v1'"));
  assert.ok(d.includes('diary-month-archive.js'));
