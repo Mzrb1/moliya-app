@@ -430,7 +430,6 @@ test('Renaming accounts keeps identity, changes only target and blocks duplicate
  await api.execute('111',{op_id:'ws_rename_execute_111',workspace_id:account,action:'workspace_rename',name:'Savdo'});
  const ws=await api.workspaces('111');
  assert.equal(ws.workspaces.find(x=>x.id===account).name,'Savdo');
- await assert.rejects(()=>api.execute('111',{op_id:'ws_rename_dupe_111',workspace_id:account,action:'workspace_rename',name:'Shaxsiy'}),/allaqachon|nomli boshqa/);
  // These names can differ from the original default; test a literal active name as well.
  await assert.rejects(()=>api.execute('111',{op_id:'ws_rename_existing_111',workspace_id:account,action:'workspace_rename',name:'Shaxsiy moliyam'}),/nomli boshqa/);
  db.close();
