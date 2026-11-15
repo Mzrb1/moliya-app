@@ -408,6 +408,6 @@ function makeFinanceApi({db,botToken,ensure}){
    json(res,404,{ok:false,error:'API topilmadi'},headers);return true;
   }catch(e){respondError(res,e,headers);return true;}
  }
- return {init,handle,ledger,execute,preferences,monthHistory,exportMonth,closed,resetBackup};
+ return {init,handle,ledger,execute,preferences,monthHistory,exportMonth,closed,resetBackup,workspaces};
 }
 module.exports={makeFinanceApi,prepareEntries,updateId,ORIGIN};
