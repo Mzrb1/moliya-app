@@ -4,7 +4,8 @@ const html=fs.readFileSync('me-notes-sahifalab/finance-unified.html','utf8');
 const js=fs.readFileSync('me-notes-sahifalab/finance-unified.js','utf8');
 const bot=fs.readFileSync('me-notes-bot/server.cjs','utf8');
 test('Telegram menu opens finance, never diary by default',()=>{
- assert.match(bot,/web_app:\{url:'https:\/\/me-notes-sahifalab.onrender.com\/finance-unified.html'/);
+ assert.match(bot,/FINANCE_MINI_APP_URL='https:\/\/me-notes-sahifalab.onrender.com\/finance-unified.html'/);
+ assert.match(bot,/web_app:\{url:FINANCE_MINI_APP_URL\}/);
  assert.doesNotMatch(js,/(?:window\.)?location\.(?:href|replace|assign)\s*\(/);
  assert.doesNotMatch(html,/href="index.html"/);
 });
