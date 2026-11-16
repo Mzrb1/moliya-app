@@ -22,9 +22,16 @@ async function register(db,uid,now=new Date()){
   args:[String(uid),timestamp,free?1:0,free?'early':'standard']});
 }
 async function status(db,uid){
- const r=await db.execute({sql:'SELECT first_seen,free_forever,reason FROM mn_early_access WHERE uid=?',args:[String(uid)]});
- if(!r.rows.length)return null;
- return {first_seen:String(r.rows[0].first_seen),free_forever:Number(r.rows[0].free_forever)===1,
-  reason:String(r.rows[0].reason),deadline:'2026-11-30',timezone:'Asia/Tashkent'};
+ const [r,manual]=await Promise.all([
+  db.execute({sql:'SELECT first_seen,free_forever,reason FROM mn_early_access WHERE uid=?',args:[String(uid)]}),
+  db.execute({sql:'SELECT granted_at FROM mn_manual_grants WHERE uid=?',args:[String(uid)]})
+ ]);
+ if(!r.rows.length&&!manual.rows.length)return null;
+ const granted=manual.rows.length>0,record=r.rows[0]||{};
+ return {first_seen:record.first_seen?String(record.first_seen):null,
+  free_forever:granted||Number(record.free_forever)===1,
+  reason:granted?'admin':String(record.reason||'standard'),
+  manually_granted:granted,granted_at:granted?String(manual.rows[0].granted_at):null,
+  deadline:'2026-11-30',timezone:'Asia/Tashkent'};
 }
 module.exports={DEADLINE_UTC,eligibleAt,initEarlyAccess,register,status};
