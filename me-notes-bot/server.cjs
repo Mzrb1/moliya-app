@@ -49,7 +49,13 @@ const financeMenuButton=()=>({type:'web_app',text:'Moliya boshqaruvi',web_app:{u
 const send=(chat_id,text,extra={})=>api('sendMessage',{chat_id,text,...extra});
 const adminBot=createAdminBot({db,send,answerCallback:(id,message)=>api('answerCallbackQuery',{
  callback_query_id:id,...(message?{text:message,show_alert:true}:{})
-})});
+}),lookupName:async(uid)=>{
+ try{
+  const person=await api('getChat',{chat_id:Number(uid)});
+  if(person?.type!=='private'||String(person.id)!==String(uid))return false;
+  return await administrator.capture(db,person);
+ }catch(_){return false;}
+}});
 async function ensure(uid){
  uid=String(uid);
  await db.execute({sql:'INSERT OR IGNORE INTO mn_users(uid) VALUES(?)',args:[uid]});
