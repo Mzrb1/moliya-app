@@ -5,6 +5,7 @@ const {createHmac}=require('node:crypto');
 const early=require('../early-access.cjs');
 const backup=require('../automatic-backup.cjs');
 const {erase,CONFIRM}=require('../account-erasure.cjs');
+const {restoreMissing}=require('../backup-recovery.cjs');
 const {makeFinanceApi}=require('../miniapp-api.cjs');
 const TOKEN='123456:FAKE_ONLY_UNIT_TESTS';
 const KEY=Buffer.alloc(32,71);
@@ -129,5 +130,29 @@ test('Short-lived signed Telegram auth is mandatory for irreversible deletion',a
  const deleted=await call(api,111,'POST','/delete-account',payload);
  assert.equal(deleted.code,200);assert.equal(deleted.json.deleted,true);
  assert.equal(Number((await db.execute({sql:'SELECT COUNT(*) AS n FROM mn_users WHERE uid=?',args:['111']})).rows[0].n),0);
+ db.close();
+});
+
+test('Backup recovery adds missing records but does not overwrite newer budget settings',async()=>{
+ const {db}=await fixture(),day='2026-11-16',now=new Date('2026-11-16T12:00:00Z');
+ await backup.create(db,'111',{key:KEY,now});
+ await db.execute({sql:'DELETE FROM mn_transactions WHERE uid=?',args:['111']});
+ await db.execute({sql:'UPDATE mn_budgets SET limit_amount=? WHERE workspace_id=?',args:[333333,'ws-111']});
+ await assert.rejects(()=>restoreMissing(db,'111',day,{confirm:'NO'},{key:KEY}),/TIKLA/);
+ const result=await restoreMissing(db,'111',day,{confirm:'TIKLA'},{key:KEY});
+ assert.equal(result.restored,1);
+ assert.equal((await db.execute({sql:'SELECT amount FROM mn_transactions WHERE uid=?',args:['111']})).rows[0].amount,25000);
+ assert.equal((await db.execute({sql:'SELECT limit_amount FROM mn_budgets WHERE workspace_id=?',args:['ws-111']})).rows[0].limit_amount,333333);
+ assert.equal((await restoreMissing(db,'111',day,{confirm:'TIKLA'},{key:KEY})).restored,0);
+ await assert.rejects(()=>restoreMissing(db,'222',day,{confirm:'TIKLA'},{key:KEY}),/topilmadi/);
+ db.close();
+});
+test('Encrypted backup cannot resurrect deliberately erased user data',async()=>{
+ const {db}=await fixture();
+ await backup.create(db,'111',{key:KEY,now:new Date('2026-11-16T05:00:00Z')});
+ await erase(db,'111',{confirm:CONFIRM,telegram_id:'111',workspace_count:1});
+ await assert.rejects(()=>backup.exportBackup(db,'111','2026-11-16',{key:KEY}),/topilmadi/);
+ assert.equal((await backup.create(db,'111',{key:KEY})).skipped,'no_user');
+ assert.equal((await backup.list(db,'111')).length,0);
  db.close();
 });
