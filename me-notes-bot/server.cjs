@@ -81,6 +81,7 @@ async function choose(uid,expanded=false){
  const keyboard=[
   [{text:'📱 Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}}]
  ];
+ if(administrator.isAdmin(uid))keyboard.push([{text:'🛡 Admin boshqaruvi',callback_data:'adm:home'}]);
  if(expanded){
   const [q,w]=await Promise.all([
    db.execute({sql:'SELECT id,kind,name FROM mn_workspaces w WHERE uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY created,id',args:[uid]}),
