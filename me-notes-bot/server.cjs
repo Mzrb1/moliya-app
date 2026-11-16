@@ -9,6 +9,8 @@ const F=require('../me-notes-sahifalab/finance-core.js');
 const {listLineUpdateId,listRangeForId}=require('./list-utils.cjs');
 const {makeFinanceApi}=require('./miniapp-api.cjs');
 const early=require('./early-access.cjs');
+const administrator=require('./admin-access.cjs');
+const {createAdminBot}=require('./admin-bot.cjs');
 const backups=require('./automatic-backup.cjs');
 const {requestRoute}=require('./request-route.cjs');
 function env(key){const x=process.env[key];if(!x)throw Error('Missing '+key);return x;}
@@ -45,6 +47,15 @@ async function api(method,params){
 const FINANCE_MINI_APP_URL='https://me-notes-sahifalab.onrender.com/finance-unified.html';
 const financeMenuButton=()=>({type:'web_app',text:'Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}});
 const send=(chat_id,text,extra={})=>api('sendMessage',{chat_id,text,...extra});
+const adminBot=createAdminBot({db,send,answerCallback:(id,message)=>api('answerCallbackQuery',{
+ callback_query_id:id,...(message?{text:message,show_alert:true}:{})
+}),lookupName:async(uid)=>{
+ try{
+  const person=await api('getChat',{chat_id:Number(uid)});
+  if(person?.type!=='private'||String(person.id)!==String(uid))return false;
+  return await administrator.capture(db,person);
+ }catch(_){return false;}
+}});
 async function ensure(uid){
  uid=String(uid);
  await db.execute({sql:'INSERT OR IGNORE INTO mn_users(uid) VALUES(?)',args:[uid]});
@@ -70,6 +81,7 @@ async function choose(uid,expanded=false){
  const keyboard=[
   [{text:'📱 Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}}]
  ];
+ if(administrator.isAdmin(uid))keyboard.push([{text:'🛡 Admin boshqaruvi',callback_data:'adm:home'}]);
  if(expanded){
   const [q,w]=await Promise.all([
    db.execute({sql:'SELECT id,kind,name FROM mn_workspaces w WHERE uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY created,id',args:[uid]}),
@@ -197,8 +209,11 @@ async function saveTelegramList(update,uid,w,chat_id,raw){
 async function handleMessage(update){
  const m=update.message;
  if(!m||m.chat?.type!=='private'||m.chat.id!==m.from?.id||typeof m.text!=='string')return;
- const uid=await ensure(m.from.id),w=await active(uid),chat_id=m.chat.id;
+ const uid=await ensure(m.from.id),chat_id=m.chat.id;
+ await administrator.capture(db,m.from);
+ const w=await active(uid);
  const text=m.text.trim(),command=text.split(/\s+/)[0].replace(/@[\w]+$/,'').toLowerCase();
+ if(await adminBot.handleMessage(uid,text))return;
  if(command==='/start'){
   try{await api('setChatMenuButton',{chat_id,menu_button:financeMenuButton()});}
   catch(e){console.error('ME Notes chat menu setup failed:',String(e.message).slice(0,100));}
@@ -272,6 +287,8 @@ async function handleCallback(update){
  const cb=update.callback_query;
  if(!cb||cb.message?.chat?.type!=='private'||cb.message.chat.id!==cb.from?.id)return;
  const uid=await ensure(cb.from.id),cmd=String(cb.data||'');
+ await administrator.capture(db,cb.from);
+ if(await adminBot.handleCallback(uid,cmd,cb.id))return;
  await api('answerCallbackQuery',{callback_query_id:cb.id});
  if(cmd.startsWith('use:')){
   const id=cmd.slice(4);

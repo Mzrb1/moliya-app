@@ -4,6 +4,7 @@ const F=require('../me-notes-sahifalab/finance-core.js');
 const {validateInitData}=require('./miniapp-auth.cjs');
 const {closedMonthPermitted,monthOfDay,monthRange}=require('./month-guard.cjs');
 const early=require('./early-access.cjs');
+const admin=require('./admin-access.cjs');
 const backup=require('./automatic-backup.cjs');
 const {erase}=require('./account-erasure.cjs');
 const {restoreMissing}=require('./backup-recovery.cjs');
@@ -66,6 +67,7 @@ function makeFinanceApi({db,botToken,ensure}){
  ],'write');
   await early.initEarlyAccess(db);
   await backup.init(db);
+  await admin.init(db);
  }
  async function owned(uid,wid){
   const r=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? AND id=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=mn_workspaces.id)',args:[uid,wid]});
@@ -391,6 +393,9 @@ function makeFinanceApi({db,botToken,ensure}){
    catch(e){throw forbidden('Telegram Mini App sessiyasi noto‘g‘ri yoki eskirgan',401);}
    await ensure(uid);
    await early.register(db,uid);
+   // The Telegram name comes only from signature-validated initData, never from arbitrary body input.
+   const rawUser=new URLSearchParams(req.headers['x-telegram-init-data']).get('user');
+   if(rawUser){try{const signedUser=JSON.parse(rawUser);if(String(signedUser?.id)===uid)await admin.capture(db,signedUser);}catch(e){console.error('Telegram name cache failed:',String(e.message).slice(0,80));}}
    if(req.method==='GET'&&req.url==='/api/v1/account-status'){
     const membership=await early.status(db,uid);
     const copies=await backup.list(db,uid);
