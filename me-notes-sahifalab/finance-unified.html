@@ -72,6 +72,29 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inl
 <div class="card"><h2>Sinxronlash holati</h2><p id="report-sync" class="tiny"></p></div>
 </section><section id="view-budget" class="hidden"><div class="card"><h2>🧮 Oylik taqsimot</h2><p id="allocation-intro" class="tiny"></p><div id="allocation"></div></div><div class="card"><h2>🎯 Kategoriya limitlari</h2><div id="limits"></div></div></section>
 <section id="view-settings" class="hidden">
+<div class="card" id="account-early-access">
+<h2>🎁 Foydalanish huquqim</h2>
+<p id="early-access-status" class="tiny">Bepul foydalanish holati tekshirilmoqda…</p>
+<p class="tiny">30-noyabr 2026 soat 23:59 gacha (Toshkent vaqti) ro‘yxatdan o‘tganlarga doimiy bepul huquq saqlanadi.</p>
+</div>
+<details class="card" id="private-backups">
+<summary>🔐 Avtomatik zaxiralar</summary>
+<div class="gap-top">
+<p id="daily-backup-status" class="tiny">Zaxiralar tekshirilmoqda…</p>
+<p class="tiny">Kunlik shifrlangan tiklash nusxalari serverdagi shu Turso bazasida 30 kungacha saqlanadi. Bu tashqi mustaqil zaxira emas. Telefoningizga JSON nusxani saqlab qo‘yishingiz mumkin.</p>
+<label for="daily-backup-day">Zaxira sanasi</label>
+<select id="daily-backup-day"></select>
+<button id="daily-backup-download" type="button" class="btn alt gap-top">Tanlangan zaxirani yuklash (.json)</button>
+<p class="tiny">JSON fayl daromad va xarajatlarni o‘z ichiga oladi. Uni begonalarga yubormang.</p>
+</div></details>
+<details class="card" id="permanent-account-erasure">
+<summary>🗑 Barcha moliyaviy ma’lumotlarimni o‘chirish</summary>
+<div class="gap-top">
+<p class="tiny"><strong>DIQQAT:</strong> Ushbu amal barcha faol va yopilgan hisoblaringiz, daromad-xarajatlar, byudjetlar, arxivlar, 30 kunlik tiklash nusxalari va doimiy bepul huquqni ham qaytarib bo‘lmaydigan tarzda o‘chiradi. Avval JSON zaxira yuklab oling. Turso provayderining favqulodda tiklash nusxalari alohida saqlanish muddatiga ega bo‘lishi mumkin.</p>
+<label for="erase-my-account-confirm">Tasdiq uchun HAMMASINI OCHIR deb yozing</label>
+<input id="erase-my-account-confirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="HAMMASINI OCHIR"/>
+<button id="erase-my-account-button" type="button" class="btn warning gap-top">Barcha ma’lumotlarimni butunlay o‘chirish</button>
+</div></details>
 <div class="card"><h2>🏷 Kategoriyalar va kalit so‘zlar</h2>
 <p class="tiny">Yangi qoidalar eski yozuvlarni o‘zgartirmaydi.</p>
 <div class="field-grid"><div><label for="settings-kind">Kategoriya turi</label><select id="settings-kind"><option value="expense">Xarajat</option><option value="income">Daromad</option></select></div>
