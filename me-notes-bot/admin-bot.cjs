@@ -5,6 +5,7 @@ function createAdminBot({db,send,answerCallback,isAdmin=admin.isAdmin,lookupName
   return {inline_keyboard:[
    [{text:'👥 Foydalanuvchilar',callback_data:'adm:users:0'},
     {text:'🎁 Qo‘lda bepul berilganlar',callback_data:'adm:grants:0'}],
+   [{text:'📢 E’lonlar va statistika',callback_data:'adm:community'}],
    [{text:'ℹ️ Qanday huquq beriladi?',callback_data:'adm:help'}]
   ]};
  }
@@ -29,6 +30,9 @@ function createAdminBot({db,send,answerCallback,isAdmin=admin.isAdmin,lookupName
     '🎁 Avtomatik bepul huquqlilar: '+s.automatic+'\n'+
     '🎫 Qo‘lda bepul huquq berilgan IDlar: '+s.manual+
     '\n\nBepul huquq berish: /grant TELEGRAM_ID\nFoydalanuvchini tekshirish: /find TELEGRAM_ID\n'+
+    '📢 E’lon: /elon Matn yoki rasmga reply + /elon\n'+
+    '📊 E’lon statistikasi: /elonlar\n'+
+    '👥 Guruh holati: /guruhholat\n\n'+
     'Hisob ma’lumotlari va shaxsiy xarajatlar bu yerda ko‘rsatilmaydi.',{reply_markup:menu()});
  }
  async function listing(uid,kind,page){
@@ -85,6 +89,16 @@ function createAdminBot({db,send,answerCallback,isAdmin=admin.isAdmin,lookupName
   if(!isAdmin(uid)){if(cbid)await answerCallback(cbid,'Ruxsat yo‘q');return true;}
   if(cbid)await answerCallback(cbid);
   if(cmd==='adm:home'){await home(uid);return true;}
+  if(cmd==='adm:community'){
+   await send(uid,'📢 ME Notes — e’lonlar boshqaruvi\n\n'+
+    '1. Guruhga botni admin qiling va guruh ichida /ulash yuboring.\n'+
+    '2. Shaxsiy chatda /elon Yangilik matni yuboring.\n'+
+    '3. Rasmli e’lon uchun rasmga javoban /elon yuboring.\n'+
+    '4. E’lon turi va auditoriyani tanlang, ko‘rib chiqib tasdiqlang.\n'+
+    '5. /elonlar — yuborish statistikasi.\n'+
+    'Bot foydalanuvchilarga reklama faqat rozilikdan keyin yuboradi.',{reply_markup:menu()});
+   return true;
+  }
   if(cmd==='adm:help'){
    await send(uid,'📌 ME Notes — admin yo‘riqnoma\n\n'+
     '1. Foydalanuvchi Telegram ID raqamini oling.\n'+

@@ -31,6 +31,15 @@ async function erase(db,uid,body){
   {sql:'DELETE FROM mn_early_access WHERE uid=?',args:[uid]},
   {sql:'DELETE FROM mn_users WHERE uid=?',args:[uid]}
  ];
+ // New community tables are optional in fixtures and older databases.
+ const tables=await db.execute({sql:"SELECT name FROM sqlite_master WHERE type='table' AND name IN ('mn_notice_prefs','mn_notice_drafts','mn_notice_outbox')"});
+ const available=new Set(tables.rows.map(x=>String(x.name)));
+ if(available.has('mn_notice_outbox')){
+  steps.unshift({sql:'DELETE FROM mn_notice_outbox WHERE target=?',args:['u:'+uid]});
+  if(available.has('mn_notice_drafts'))steps.unshift({sql:'DELETE FROM mn_notice_outbox WHERE notice_id IN (SELECT id FROM mn_notice_drafts WHERE admin_uid=?)',args:[uid]});
+ }
+ if(available.has('mn_notice_drafts'))steps.unshift({sql:'DELETE FROM mn_notice_drafts WHERE admin_uid=?',args:[uid]});
+ if(available.has('mn_notice_prefs'))steps.unshift({sql:'DELETE FROM mn_notice_prefs WHERE uid=?',args:[uid]});
  await db.batch(steps,'write');
  return {deleted:true,deleted_workspaces:total};
 }

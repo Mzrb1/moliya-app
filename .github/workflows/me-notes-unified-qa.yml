@@ -26,6 +26,7 @@ jobs:
           node --check me-notes-bot/server.cjs
           node --check me-notes-bot/admin-access.cjs
           node --check me-notes-bot/admin-bot.cjs
+          node --check me-notes-bot/community.cjs
           node --check me-notes-bot/early-access.cjs
           node --check me-notes-bot/automatic-backup.cjs
           node --check me-notes-bot/account-erasure.cjs
@@ -37,6 +38,8 @@ jobs:
           node --check me-notes-sahifalab/finance-sw.js
       - name: API security and shared ledger tests
         run: node --test me-notes-bot/tests/miniapp-api.test.cjs me-notes-bot/tests/request-route.test.cjs
+      - name: Group binding, subscriber consent, announcements and privacy
+        run: node --test me-notes-bot/tests/community.test.cjs
       - name: Early access, daily backups, full deletion and cross-user tests
         run: node --test me-notes-bot/tests/lifecycle.test.cjs
       - name: Private admin security, user names, lifetime grants and erasure tests
