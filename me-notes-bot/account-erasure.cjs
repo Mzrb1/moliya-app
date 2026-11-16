@@ -25,6 +25,8 @@ async function erase(db,uid,body){
   {sql:'DELETE FROM mn_api_ops WHERE uid=?',args:[uid]},
   {sql:'DELETE FROM mn_transactions WHERE uid=?',args:[uid]},
   {sql:'DELETE FROM mn_user_backups WHERE uid=?',args:[uid]},
+  {sql:'DELETE FROM mn_user_profiles WHERE uid=?',args:[uid]},
+  {sql:'DELETE FROM mn_manual_grants WHERE uid=?',args:[uid]},
   {sql:'DELETE FROM mn_workspaces WHERE uid=?',args:[uid]},
   {sql:'DELETE FROM mn_early_access WHERE uid=?',args:[uid]},
   {sql:'DELETE FROM mn_users WHERE uid=?',args:[uid]}
