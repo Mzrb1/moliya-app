@@ -6,7 +6,7 @@ const tg=window.Telegram?.WebApp||null;
 const initData=String(tg?.initData||'');
 const cacheUid=String(tg?.initDataUnsafe?.user?.id||'');
 const CACHE_KEY='me_notes_unified_cache_'+cacheUid,QUEUE_KEY='me_notes_unified_queue_'+cacheUid;
-const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),seenToday:F.today().slice(0,7),views:'home',base:{},queue:[],months:[],archived:[],online:false,storageOK:true,busy:false};
+const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),seenToday:F.today().slice(0,7),views:'home',base:{},queue:[],months:[],archived:[],online:false,storageOK:true,busy:false,accountStatus:null,deleted:false};
 let legacyBackup=null;
 let editingId=null;
 function el(tag,cls,text){const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x;}
@@ -96,6 +96,71 @@ async function fetchWorkspaces(){
  state.workspaces=data.workspaces;state.archived=data.archived||[];state.active=data.active||data.workspaces[0]?.id||null;
  save();
 }
+async function fetchAccountStatus(){
+ const data=await request('/account-status');
+ state.accountStatus=data;
+ renderAccountAccess();
+}
+function renderAccountAccess(){
+ const info=state.accountStatus;
+ if(!info){$('early-access-status').textContent='Bepul foydalanish holati hozircha yuklanmadi.';return;}
+ const grant=info.early_access;
+ $('early-access-status').textContent=grant?.free_forever?
+  '✅ Doimiy bepul foydalanish huquqi saqlangan ('+(grant.reason==='legacy'?'oldingi foydalanuvchi':'erta qo‘shilgan foydalanuvchi')+').':
+  'Hozirgi rejim: bepul sinov. Doimiy bepul huquq ushbu akkauntga belgilanmagan.';
+ const items=info.backups||[];
+ $('daily-backup-status').textContent=!info.backup_enabled?
+  '⚠️ Serverda avtomatik zaxira hali yoqilmagan. Hozir oylik JSON eksportidan foydalaning.':
+  items.length?'Oxirgi nusxa: '+items[0].created.slice(0,16).replace('T',' ')+' UTC · '+items.length+' ta nusxa mavjud.':
+  'Shifrlangan zaxira tizimi yoqilgan. Birinchi avtomatik nusxa hali tayyor emas.';
+ const picker=$('daily-backup-day'),selected=picker.value;
+ picker.replaceChildren(...items.map(x=>{
+  const option=el('option');option.value=x.day;option.textContent=x.day;return option;
+ }));
+ if(items.some(x=>x.day===selected))picker.value=selected;
+ $('daily-backup-download').disabled=!items.length||!info.backup_enabled;
+}
+async function downloadDailyBackup(){
+ try{
+  if(state.queue.length)throw Error('Avval navbatdagi yozuvlar sinxronlansin');
+  const day=$('daily-backup-day').value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw Error('Zaxira sanasi tanlanmagan');
+  const result=await request('/backup-export?day='+encodeURIComponent(day));
+  const payload=JSON.stringify(result.backup,null,2);
+  const blob=new Blob([payload],{type:'application/json;charset=utf-8'});
+  const a=document.createElement('a'),url=URL.createObjectURL(blob);
+  a.href=url;a.download='me_notes_zaxira_'+day+'.json';document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),12000);
+  alertMessage('JSON zaxira yuklab olish boshlandi. Faylni xavfsiz saqlang.',true);
+ }catch(e){alertMessage('Zaxirani yuklab bo‘lmadi: '+e.message);}
+}
+async function deleteMyAccount(){
+ try{
+  if(!state.online||!navigator.onLine||state.queue.length||state.busy)
+   throw Error('Avval internetni ulang va barcha yozuvlarni sinxronlang');
+  if($('erase-my-account-confirm').value.trim()!=='HAMMASINI OCHIR')
+   throw Error('Tasdiq uchun HAMMASINI OCHIR deb yozing');
+  if(!confirm('BARCHA SHAXSIY, OILAVIY, BIZNES HISOBLARI VA ULARNING YOZUVLARI BUTUNLAY O‘CHIRILADI. DAVOM ETASIZMI?'))return;
+  if(!confirm('Oxirgi tasdiq: doimiy bepul huquqingiz ham yo‘qoladi, shu Turso bazasidagi zaxiralar ham o‘chadi. Bu amalni bekor qilib bo‘lmaydi. O‘CHIRILSINMI?'))return;
+  $('erase-my-account-button').disabled=true;
+  const count=state.workspaces.length+state.archived.length;
+  const result=await request('/delete-account',{method:'POST',body:{
+   confirm:'HAMMASINI OCHIR',telegram_id:cacheUid,workspace_count:count
+  }});
+  if(!result.deleted)throw Error('Server o‘chirishni tasdiqlamadi');
+  localStorage.removeItem(CACHE_KEY);localStorage.removeItem(QUEUE_KEY);
+  state.deleted=true;state.workspaces=[];state.active=null;state.base={};state.queue=[];state.archived=[];
+  state.accountStatus=null;state.online=false;
+  $('app').classList.add('hidden');$('welcome').classList.remove('hidden');
+  $('welcome').querySelector('h2').textContent='Ma’lumotlaringiz o‘chirildi';
+  $('welcome').querySelector('p').textContent='ME Notes’dagi moliyaviy hisoblar, yozuvlar va ichki zaxiralar o‘chirildi. Qayta foydalanish uchun botda /start yuboring.';
+  $('sync-status').textContent='Hisob o‘chirildi';
+  $('erase-my-account-confirm').value='';
+  alertMessage('Barcha moliyaviy yozuvlaringiz bazadan o‘chirildi. Endi qayta ro‘yxatdan o‘tish yangi hisob yaratadi.',true);
+ }catch(e){alertMessage('Hisob o‘chirilmadi: '+e.message);}
+ finally{$('erase-my-account-button').disabled=false;}
+}
+
 async function fetchLedger(){
  const wid=state.active,month=state.month;
  const workspace=state.workspaces.find(w=>w.id===wid);
@@ -118,10 +183,11 @@ async function fetchMonthHistory(){
  renderMonthHistory();
 }
 async function pull(){
- if(!initData)return;
+ if(state.deleted||!initData)return;
  $('connection-help').classList.add('hidden');
  try{
   await fetchWorkspaces();state.online=true;await flush();await fetchLedger();await fetchMonthHistory();
+  try{await fetchAccountStatus();}catch(e){$('daily-backup-status').textContent='Zaxira holati vaqtincha olinmadi.';}
   state.online=true;render();noteStatus();alertMessage('');
   $('connection-help').classList.add('hidden');
  }catch(e){
@@ -148,7 +214,7 @@ function enqueue(data){
  render();noteStatus();flush();
 }
 async function flush(){
- if(state.busy||!initData||!navigator.onLine||!state.queue.length)return;
+ if(state.deleted||state.busy||!initData||!navigator.onLine||!state.queue.length)return;
  state.busy=true;
  try{
   while(state.queue.length){
@@ -595,6 +661,8 @@ function importLegacy(){
 }
 
 function setup(){
+ $('daily-backup-download').onclick=downloadDailyBackup;
+ $('erase-my-account-button').onclick=deleteMyAccount;
  if(tg){try{tg.ready();tg.expand();}catch(e){}}
  $('month').value=state.month;
  document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('click',()=>chooseView(btn.dataset.view)));
