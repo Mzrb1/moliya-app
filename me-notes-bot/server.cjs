@@ -8,6 +8,8 @@ const {createClient}=require('@libsql/client');
 const F=require('../me-notes-sahifalab/finance-core.js');
 const {listLineUpdateId,listRangeForId}=require('./list-utils.cjs');
 const {makeFinanceApi}=require('./miniapp-api.cjs');
+const early=require('./early-access.cjs');
+const backups=require('./automatic-backup.cjs');
 const {requestRoute}=require('./request-route.cjs');
 function env(key){const x=process.env[key];if(!x)throw Error('Missing '+key);return x;}
 const token=env('BOT_TOKEN');
@@ -46,6 +48,7 @@ const send=(chat_id,text,extra={})=>api('sendMessage',{chat_id,text,...extra});
 async function ensure(uid){
  uid=String(uid);
  await db.execute({sql:'INSERT OR IGNORE INTO mn_users(uid) VALUES(?)',args:[uid]});
+ await early.register(db,uid);
  const existing=await db.execute({sql:"SELECT w.id FROM mn_workspaces w WHERE w.uid=? AND NOT EXISTS(SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id) ORDER BY w.created,w.id LIMIT 1",args:[uid]});
  if(!existing.rows.length){
   // Atomic INSERT ... SELECT prevents duplicate default workspaces from webhook retries.
@@ -303,6 +306,25 @@ async function main(){
  }).listen(Number(process.env.PORT||10000),'0.0.0.0',async()=>{
   console.log('ME Notes Telegram chat listener started');
   // Faqat Render environmentda maxsus yoqilgandagina webhook almashtiriladi.
+  // Daily encrypted recovery copies; catch missed days on service restart.
+  // This is a logical, same-Turso-DB backup, not an external disaster copy.
+  let backupKey=null;
+  try{backupKey=backups.keyFromEnv();}
+  catch(e){console.error('ME Notes backup disabled:',String(e.message).slice(0,120));}
+  if(backupKey){
+   let working=false;
+   const cycle=async()=>{
+    if(working)return;
+    working=true;
+    try{
+     const result=await backups.sweep(db,{key:backupKey});
+     console.log('ME Notes daily backup cycle:',JSON.stringify(result));
+    }catch(e){console.error('ME Notes daily backup cycle failed:',String(e.message).slice(0,120));}
+    finally{working=false;}
+   };
+   setTimeout(cycle,3000).unref();
+   setInterval(cycle,6*60*60*1000).unref();
+  }else console.warn('ME Notes daily backup is not enabled: ME_NOTES_BACKUP_KEY_B64 missing');
   if(process.env.AUTO_SET_WEBHOOK==='true'){
    const base=String(process.env.PUBLIC_BASE_URL||'').trim();
    if(!/^https:\/\/[a-zA-Z0-9.-]+(?::443)?\/?$/.test(base)){
