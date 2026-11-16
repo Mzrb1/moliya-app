@@ -6,9 +6,24 @@ const tg=window.Telegram?.WebApp||null;
 const initData=String(tg?.initData||'');
 const cacheUid=String(tg?.initDataUnsafe?.user?.id||'');
 const CACHE_KEY='me_notes_unified_cache_'+cacheUid,QUEUE_KEY='me_notes_unified_queue_'+cacheUid;
-const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),seenToday:F.today().slice(0,7),views:'home',base:{},queue:[],months:[],archived:[],online:false,storageOK:true,busy:false,accountStatus:null,deleted:false};
+const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),seenToday:F.today().slice(0,7),views:'home',base:{},queue:[],months:[],archived:[],online:false,connecting:false,storageOK:true,busy:false,accountStatus:null,deleted:false};
 let legacyBackup=null;
 let editingId=null;
+let reconnectTimer=null,reconnectDelay=2500;
+function stopReconnect(){
+ if(reconnectTimer!==null){clearTimeout(reconnectTimer);reconnectTimer=null;}
+ reconnectDelay=2500;
+}
+function scheduleReconnect(){
+ if(reconnectTimer!==null||state.deleted||!initData||!navigator.onLine)return;
+ const delay=reconnectDelay;
+ reconnectDelay=Math.min(reconnectDelay*2,30000);
+ reconnectTimer=setTimeout(()=>{
+  reconnectTimer=null;
+  // Hidden Mini Apps should refresh once the user returns, not keep retrying in the background.
+  if(document.visibilityState==='visible')pull();
+ },delay);
+}
 function el(tag,cls,text){const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x;}
 function alertMessage(text,ok=false){
  const zone=$('notices');zone.replaceChildren();
@@ -73,7 +88,7 @@ function compute(){
  return {items,summary,plan:F.salaryAllocation(shadow,state.month),w,prefs,closedAt:snapshot.closed_at||null,resetBackup:snapshot.reset_backup||null};
 }
 function noteStatus(text){
- $('sync-status').textContent=text||((state.online?'🟢 Telegram bilan ulangan':'🟠 Offline / ulanmagan')+
+ $('sync-status').textContent=text||((state.connecting?'⏳ Serverga ulanmoqda…':state.online?'🟢 Telegram bilan ulangan':'🟠 Offline / ulanmagan')+
   (state.queue.length?' · '+state.queue.length+' ta amal navbatda':''));
  $('sync-status').className='status'+(!state.online?' warn':'');
  $('queue-info').textContent=state.queue.length?
@@ -84,7 +99,7 @@ async function request(path,options={}){
  if(!initData)throw Error('Telegram orqali ilovani oching');
  const headers={'X-Telegram-Init-Data':initData};
  if(options.body!==undefined)headers['Content-Type']='application/json';
- const res=await fetch(API+path,{method:options.method||'GET',headers,body:options.body===undefined?undefined:JSON.stringify(options.body),signal:AbortSignal.timeout(14000),cache:'no-store'});
+ const res=await fetch(API+path,{method:options.method||'GET',headers,body:options.body===undefined?undefined:JSON.stringify(options.body),signal:AbortSignal.timeout((options.method||'GET')==='GET'?20000:14000),cache:'no-store'});
  const obj=await res.json().catch(()=>({error:'Serverdan noto‘g‘ri javob'}));
  if(!res.ok||!obj.ok){
   const err=new Error(obj.error||('HTTP '+res.status));err.status=res.status;throw err;
@@ -199,23 +214,31 @@ async function fetchMonthHistory(){
  renderMonthHistory();
 }
 async function pull(){
- if(state.deleted||!initData)return;
+ if(state.deleted||!initData||state.connecting)return;
+ state.connecting=true;
+ noteStatus();
  $('connection-help').classList.add('hidden');
  try{
   await fetchWorkspaces();state.online=true;await flush();await fetchLedger();await fetchMonthHistory();
   try{await fetchAccountStatus();}catch(e){$('daily-backup-status').textContent='Zaxira holati vaqtincha olinmadi.';}
-  state.online=true;render();noteStatus();alertMessage('');
+  state.online=true;stopReconnect();render();alertMessage('');
   $('connection-help').classList.add('hidden');
  }catch(e){
   state.online=false;
+  const recoverable=!e.status||e.status>=500;
   const message=e.status===401?'Telegram sessiyasi tugagan. Botga /start yuborib, Mini App tugmasidan qayta kiring.':
    e.status===403?'Mini App’ni ME Notes botining tugmasi orqali oching.':
    e.status===404?'Mini App serveriga ulanish yo‘li topilmadi. Ilova yangilanganini tekshiring.':
+   recoverable&&navigator.onLine?'Server vaqtincha javob bermayapti. Qayta ulanish avtomatik bajariladi.':
    'Server bilan aloqa uzildi. Internetni tekshiring va qayta urinib ko‘ring.';
   alertMessage(message);
   $('connection-explain').textContent=message;
   $('connection-help').classList.toggle('hidden',!!current());
-  noteStatus();render();
+  render();
+  if(recoverable)scheduleReconnect();
+ }finally{
+  state.connecting=false;
+  noteStatus();
  }
 }
 function newOp(data){
@@ -571,9 +594,11 @@ function render(){
  renderAccounts();
  $('month').value=state.month;
  if(!data)return;
- $('net').textContent=money(data.summary.net);
- $('income').textContent=money(data.summary.income);
- $('expense').textContent=money(data.summary.expense);
+ // Never show a misleading zero balance before this account/month has loaded from Turso.
+ const knownLedger=Boolean(cached());
+ $('net').textContent=knownLedger?money(data.summary.net):'—';
+ $('income').textContent=knownLedger?money(data.summary.income):'—';
+ $('expense').textContent=knownLedger?money(data.summary.expense):'—';
  const thisMonth=F.today().slice(0,7);
  const quickIsCurrent=state.month===thisMonth;
  $('quick-save').disabled=!quickIsCurrent;
@@ -810,16 +835,18 @@ function setup(){
  $('month-reset-restore').onclick=restoreMonthReset;
  $('sync-now').onclick=pull;
 
- window.addEventListener('visibilitychange',()=>{
+ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible')return;
   const now=F.today().slice(0,7);
   if(now!==state.seenToday){
    if(state.month===state.seenToday)state.month=now;
    state.seenToday=now;
-   render();if(navigator.onLine)pull();
+   render();
   }
+  // Chat entries may have changed while this WebView was hidden.
+  if(navigator.onLine)pull();
  });
- window.addEventListener('online',()=>{flush();pull();});
+ window.addEventListener('online',()=>{pull();});
  window.addEventListener('offline',()=>{state.online=false;noteStatus();});
  if('serviceWorker' in navigator)navigator.serviceWorker.register('./finance-sw.js').catch(()=>{});
  restore();
