@@ -1,6 +1,6 @@
 'use strict';
 const admin=require('./admin-access.cjs');
-function createAdminBot({db,send,answerCallback,isAdmin=admin.isAdmin}){
+function createAdminBot({db,send,answerCallback,isAdmin=admin.isAdmin,lookupName=async()=>false}){
  function menu(){
   return {inline_keyboard:[
    [{text:'👥 Foydalanuvchilar',callback_data:'adm:users:0'},
@@ -32,7 +32,12 @@ function createAdminBot({db,send,answerCallback,isAdmin=admin.isAdmin}){
     'Hisob ma’lumotlari va shaxsiy xarajatlar bu yerda ko‘rsatilmaydi.',{reply_markup:menu()});
  }
  async function listing(uid,kind,page){
-  const data=await admin.list(db,kind,page);
+  let data=await admin.list(db,kind,page);
+  const unknown=data.entries.filter(x=>x.registered&&x.name==='Ism hali olinmagan').slice(0,5);
+  if(unknown.length){
+   await Promise.allSettled(unknown.map(x=>lookupName(x.uid)));
+   data=await admin.list(db,kind,page);
+  }
   const title=kind==='users'?'👥 ME Notes foydalanuvchilari':'🎁 Qo‘lda bepul huquq berilganlar';
   const text=title+' · '+(page+1)+'-sahifa\n\n'+
     (data.entries.length?data.entries.map((x,i)=>
@@ -62,7 +67,11 @@ function createAdminBot({db,send,answerCallback,isAdmin=admin.isAdmin}){
     await send(uid,'Telegram ID noto‘g‘ri.\nMisol: '+cmd+' 123456789');
     return true;
    }
-   const profile=await admin.inspect(db,target);
+   let profile=await admin.inspect(db,target);
+   if(profile.registered&&profile.name==='Ism hali olinmagan'){
+    await lookupName(target);
+    profile=await admin.inspect(db,target);
+   }
    await send(uid,(cmd==='/grant'?'🎁 Bepul huquq berishni tasdiqlang:\n\n':'🔎 Foydalanuvchi ma’lumoti:\n\n')+
     pretty(profile)+(profile.manually_granted?'\n\nHuquq oldin berilgan. Ikkinchi marta kiritilmaydi.':
      '\n\nDiqqat: IDni diqqat bilan tekshiring. Noto‘g‘ri IDga ham huquq berib yuborishingiz mumkin.'),
