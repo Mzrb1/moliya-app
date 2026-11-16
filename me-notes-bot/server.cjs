@@ -11,6 +11,7 @@ const {makeFinanceApi}=require('./miniapp-api.cjs');
 const early=require('./early-access.cjs');
 const administrator=require('./admin-access.cjs');
 const {createAdminBot}=require('./admin-bot.cjs');
+const {createCommunityBot}=require('./community.cjs');
 const backups=require('./automatic-backup.cjs');
 const {requestRoute}=require('./request-route.cjs');
 function env(key){const x=process.env[key];if(!x)throw Error('Missing '+key);return x;}
@@ -47,6 +48,7 @@ async function api(method,params){
 const FINANCE_MINI_APP_URL='https://me-notes-sahifalab.onrender.com/finance-unified.html';
 const financeMenuButton=()=>({type:'web_app',text:'Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}});
 const send=(chat_id,text,extra={})=>api('sendMessage',{chat_id,text,...extra});
+const communityBot=createCommunityBot({db,telegram:api,send,answerCallback:(id)=>api('answerCallbackQuery',{callback_query_id:id})});
 const adminBot=createAdminBot({db,send,answerCallback:(id,message)=>api('answerCallbackQuery',{
  callback_query_id:id,...(message?{text:message,show_alert:true}:{})
 }),lookupName:async(uid)=>{
@@ -81,6 +83,7 @@ async function choose(uid,expanded=false){
  const keyboard=[
   [{text:'📱 Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}}]
  ];
+ keyboard.push([{text:'👥 Hamjamiyat',callback_data:'cm:group'},{text:'🔔 Xabarnomalar',callback_data:'cm:optmenu'}]);
  if(administrator.isAdmin(uid))keyboard.push([{text:'🛡 Admin boshqaruvi',callback_data:'adm:home'}]);
  if(expanded){
   const [q,w]=await Promise.all([
@@ -100,6 +103,7 @@ const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 m
  '📁 /hisob — hisobni almashtirish\n📊 /hisobot yoki /hisobot 2026-10 — kerakli oy\n🧮 /taqsimot yoki /taqsimot 2026-10 — oylik reja\n'+
  '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni bekor qilish\n'+
  'ℹ️ /yordam — yordam\n'+
+ '👥 /guruh — hamjamiyatga qo‘shilish\n🔔 /obuna — yangilik va reklama xabarnomalari\n'+
  '📱 /start — Moliya Mini App tugmasi';
 function checkSecret(input){
  if(typeof input!=='string')return false;
@@ -208,9 +212,15 @@ async function saveTelegramList(update,uid,w,chat_id,raw){
 
 async function handleMessage(update){
  const m=update.message;
- if(!m||m.chat?.type!=='private'||m.chat.id!==m.from?.id||typeof m.text!=='string')return;
+ if(!m)return;
+ if(m.chat?.type==='group'||m.chat?.type==='supergroup'){
+  await communityBot.handleGroupMessage(m);return;
+ }
+ if(m.chat?.type!=='private'||m.chat.id!==m.from?.id)return;
  const uid=await ensure(m.from.id),chat_id=m.chat.id;
  await administrator.capture(db,m.from);
+ if(await communityBot.handlePrivateMessage(m))return;
+ if(typeof m.text!=='string')return;
  const w=await active(uid);
  const text=m.text.trim(),command=text.split(/\s+/)[0].replace(/@[\w]+$/,'').toLowerCase();
  if(await adminBot.handleMessage(uid,text))return;
@@ -288,6 +298,7 @@ async function handleCallback(update){
  if(!cb||cb.message?.chat?.type!=='private'||cb.message.chat.id!==cb.from?.id)return;
  const uid=await ensure(cb.from.id),cmd=String(cb.data||'');
  await administrator.capture(db,cb.from);
+ if(await communityBot.handleCallback(uid,cmd,cb.id))return;
  if(await adminBot.handleCallback(uid,cmd,cb.id))return;
  await api('answerCallbackQuery',{callback_query_id:cb.id});
  if(cmd.startsWith('use:')){
@@ -306,6 +317,8 @@ async function handleCallback(update){
 async function main(){
  await init();
  await financeApi.init();
+ await communityBot.init();
+ communityBot.start();
  http.createServer(async(req,res)=>{
   const route=requestRoute(req.method,req.url);
   if(route==='health'){res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}');return;}
