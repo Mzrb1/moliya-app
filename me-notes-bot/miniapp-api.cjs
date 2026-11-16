@@ -6,6 +6,7 @@ const {closedMonthPermitted,monthOfDay,monthRange}=require('./month-guard.cjs');
 const early=require('./early-access.cjs');
 const backup=require('./automatic-backup.cjs');
 const {erase}=require('./account-erasure.cjs');
+const {restoreMissing}=require('./backup-recovery.cjs');
 
 const ORIGIN='https://me-notes-sahifalab.onrender.com';
 const MAX_LIST=20;
@@ -401,6 +402,13 @@ function makeFinanceApi({db,botToken,ensure}){
     const day=url.searchParams.get('day');
     const file=await backup.exportBackup(db,uid,day);
     json(res,200,{ok:true,backup:file},headers);return true;
+   }
+   if(req.method==='POST'&&req.url==='/api/v1/backup-restore'){
+    if(Math.floor(Date.now()/1000)-authDate>600)
+     throw forbidden('Tiklash uchun Telegram Mini App’ni qayta oching',401);
+    const input=await readJson(req);
+    const result=await restoreMissing(db,uid,input.day,input);
+    json(res,200,{ok:true,...result},headers);return true;
    }
    if(req.method==='POST'&&req.url==='/api/v1/delete-account'){
     // Financial records are sensitive. Require a freshly opened Telegram Mini App
