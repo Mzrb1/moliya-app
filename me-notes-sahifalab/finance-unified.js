@@ -119,6 +119,7 @@ function renderAccountAccess(){
  }));
  if(items.some(x=>x.day===selected))picker.value=selected;
  $('daily-backup-download').disabled=!items.length||!info.backup_enabled;
+ $('daily-backup-restore').disabled=!items.length||!info.backup_enabled;
 }
 async function downloadDailyBackup(){
  try{
@@ -133,6 +134,21 @@ async function downloadDailyBackup(){
   setTimeout(()=>URL.revokeObjectURL(url),12000);
   alertMessage('JSON zaxira yuklab olish boshlandi. Faylni xavfsiz saqlang.',true);
  }catch(e){alertMessage('Zaxirani yuklab bo‘lmadi: '+e.message);}
+}
+async function restoreDailyBackup(){
+ try{
+  if(!state.online||!navigator.onLine||state.busy||state.queue.length)
+   throw Error('Avval internetni ulang va barcha yozuvlarni sinxronlang');
+  const day=$('daily-backup-day').value;
+  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day))throw Error('Zaxira sanasini tanlang');
+  if(!confirm(day+' sanasidagi zaxirada bor, ammo hozir yetishmayotgan kirim-chiqimlar, kategoriyalar va limitlarni qayta qo‘shasizmi? Mavjud yozuvlar o‘zgarmaydi.'))return;
+  const word=prompt('Tiklash uchun TIKLA deb yozing:');
+  if(word!=='TIKLA')return;
+  const result=await request('/backup-restore',{method:'POST',body:{day,confirm:'TIKLA'}});
+  state.base={};state.months=[];
+  await fetchWorkspaces();await fetchLedger();await fetchMonthHistory();await fetchAccountStatus();render();
+  alertMessage(result.restored+' ta yetishmagan yozuv yoki sozlama tiklandi. Hozirgi qiymatlar o‘zgarmadi.',true);
+ }catch(e){alertMessage('Zaxiradan tiklash amalga oshmadi: '+e.message);}
 }
 async function deleteMyAccount(){
  try{
@@ -662,6 +678,7 @@ function importLegacy(){
 
 function setup(){
  $('daily-backup-download').onclick=downloadDailyBackup;
+ $('daily-backup-restore').onclick=restoreDailyBackup;
  $('erase-my-account-button').onclick=deleteMyAccount;
  if(tg){try{tg.ready();tg.expand();}catch(e){}}
  $('month').value=state.month;
