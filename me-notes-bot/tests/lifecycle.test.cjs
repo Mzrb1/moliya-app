@@ -15,6 +15,7 @@ async function fixture(){
   'CREATE TABLE mn_workspaces(id TEXT PRIMARY KEY,uid TEXT NOT NULL,kind TEXT NOT NULL,name TEXT NOT NULL,created TEXT NOT NULL)',
   'CREATE TABLE mn_transactions(id TEXT PRIMARY KEY,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,update_id INTEGER NOT NULL UNIQUE,kind TEXT NOT NULL,category TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),note TEXT,day TEXT NOT NULL,created TEXT NOT NULL)',
   'CREATE TABLE mn_budgets(workspace_id TEXT NOT NULL,month TEXT NOT NULL,category TEXT NOT NULL,limit_amount INTEGER NOT NULL CHECK(limit_amount>=0),PRIMARY KEY(workspace_id,month,category))',
+  'CREATE TABLE mn_processed_lists(update_id INTEGER PRIMARY KEY,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,created TEXT NOT NULL)',
   {sql:'INSERT INTO mn_users(uid,active) VALUES(?,?)',args:['111','ws-111']},
   {sql:'INSERT INTO mn_workspaces(id,uid,kind,name,created) VALUES(?,?,?,?,?)',args:['ws-111','111','personal','Shaxsiy moliyam','2026-11-12']},
   {sql:'INSERT INTO mn_users(uid,active) VALUES(?,?)',args:['222','ws-222']},
