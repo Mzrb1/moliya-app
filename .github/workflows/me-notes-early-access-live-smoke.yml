@@ -1,0 +1,50 @@
+name: ME Notes Early Access Live Safety Smoke
+on:
+  push:
+    branches: [qa/me-notes-early-access-live-20261116]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify live UI and protected backup/delete routes
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          const site='https://me-notes-sahifalab.onrender.com';
+          const api='https://me-notes-chat-test.onrender.com';
+          async function request(url,opts={}){
+            let last;
+            for(let i=0;i<4;i++){
+              try{
+                const response=await fetch(url,{...opts,signal:AbortSignal.timeout(25000)});
+                if(response.status>=500&&i<3){await new Promise(r=>setTimeout(r,1000));continue;}
+                return response;
+              }catch(e){last=e;await new Promise(r=>setTimeout(r,1000));}
+            }
+            throw last;
+          }
+          (async()=>{
+            const [health,html,js,access,backup,erase,restore]=await Promise.all([
+              request(api+'/health'),request(site+'/finance-unified.html'),
+              request(site+'/finance-unified.js'),request(api+'/api/v1/account-status'),
+              request(api+'/api/v1/backup-export?day=2026-11-16'),
+              request(api+'/api/v1/delete-account',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:'HAMMASINI OCHIR'})}),
+              request(api+'/api/v1/backup-restore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:'TIKLA'})})
+            ]);
+            assert.equal(health.status,200);
+            assert.equal(html.status,200);
+            assert.equal(js.status,200);
+            const text=await html.text(),src=await js.text();
+            for(const id of ['account-early-access','private-backups','permanent-account-erasure','daily-backup-restore','erase-my-account-button'])
+              assert.ok(text.includes('id="'+id+'"'),id);
+            for(const word of ['fetchAccountStatus','downloadDailyBackup','restoreDailyBackup','deleteMyAccount'])
+              assert.ok(src.includes(word),word);
+            for(const [name,response] of [['free',access],['backup',backup],['delete',erase],['restore',restore]])
+              assert.equal(response.status,401,name+' must require signed Telegram auth');
+            assert.ok(!text.includes('Sahifalab Akademiya'));
+            console.log('PASS: finance-only live UI and all four signed-user-only API paths');
+          })().catch(e=>{console.error(e.stack||e);process.exitCode=1;});
+          NODE
