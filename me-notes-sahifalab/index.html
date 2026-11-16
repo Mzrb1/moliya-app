@@ -30,5 +30,22 @@ small{color:#718095;display:block;margin-top:16px}
 <a class="action" href="https://t.me/ME_notes_bot">Telegram botni ochish</a>
 <small>Botda /start yuborib, «Moliya boshqaruvi» tugmasini bosing.</small>
 </main>
+<!-- BotFather Main Mini App URL may still point to the site root.
+     Reuse the Telegram launch fragment so its signed initData survives navigation. -->
+<script src="https://telegram.org/js/telegram-web-app.js?64"></script>
+<script id="miniapp-entry-router">
+(() => {
+ 'use strict';
+ const launch=new URLSearchParams(window.location.hash.slice(1));
+ const hasTelegramLaunch=launch.has('tgWebAppData') && launch.has('tgWebAppVersion');
+ const hasTelegramSession=Boolean(window.Telegram?.WebApp?.initData);
+ if (!hasTelegramLaunch && !hasTelegramSession) return;
+ const finance=new URL('./finance-unified.html',window.location.href);
+ finance.search=window.location.search;
+ finance.hash=window.location.hash;
+ // Replace (not push) the landing page in this WebView's navigation stack.
+ window.location.replace(finance.href);
+})();
+</script>
 </body>
 </html>
