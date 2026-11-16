@@ -164,6 +164,7 @@ function createCommunityBot({db,telegram,send,answerCallback,isAdmin=admin.isAdm
  async function handleCallback(uid,cmd,cbId){
   if(!String(cmd||'').startsWith('cm:'))return false;
   if(cbId)await answerCallback(cbId);
+  if(cmd==='cm:optmenu'){await preferenceMenu(uid);return true;}
   if(cmd==='cm:group'){await showGroup(uid);return true;}
   const opt=/^cm:opt:(updates|promotions):(on|off)$/.exec(cmd);
   if(opt){await setPreference(uid,opt[1],opt[2]==='on');await preferenceMenu(uid);return true;}
