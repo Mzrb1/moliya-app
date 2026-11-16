@@ -3,6 +3,9 @@ const {createHash,randomUUID}=require('node:crypto');
 const F=require('../me-notes-sahifalab/finance-core.js');
 const {validateInitData}=require('./miniapp-auth.cjs');
 const {closedMonthPermitted,monthOfDay,monthRange}=require('./month-guard.cjs');
+const early=require('./early-access.cjs');
+const backup=require('./automatic-backup.cjs');
+const {erase}=require('./account-erasure.cjs');
 
 const ORIGIN='https://me-notes-sahifalab.onrender.com';
 const MAX_LIST=20;
@@ -60,6 +63,8 @@ function makeFinanceApi({db,botToken,ensure}){
   'CREATE TABLE IF NOT EXISTS mn_month_reset_budget (reset_id TEXT NOT NULL,workspace_id TEXT NOT NULL,month TEXT NOT NULL,category TEXT NOT NULL,limit_amount INTEGER NOT NULL,PRIMARY KEY(reset_id,category))',
   'CREATE TABLE IF NOT EXISTS mn_workspace_archive (workspace_id TEXT PRIMARY KEY,uid TEXT NOT NULL,archived_at TEXT NOT NULL)'
  ],'write');
+  await early.initEarlyAccess(db);
+  await backup.init(db);
  }
  async function owned(uid,wid){
   const r=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? AND id=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=mn_workspaces.id)',args:[uid,wid]});
@@ -380,10 +385,32 @@ function makeFinanceApi({db,botToken,ensure}){
   const headers=sendCors;
   if(req.method==='OPTIONS'){res.writeHead(204,headers);res.end();return true;}
   try{
-   let uid;
-   try{({uid}=validateInitData(req.headers['x-telegram-init-data'],botToken));}
+   let uid,authDate;
+   try{({uid,authDate}=validateInitData(req.headers['x-telegram-init-data'],botToken));}
    catch(e){throw forbidden('Telegram Mini App sessiyasi noto‘g‘ri yoki eskirgan',401);}
    await ensure(uid);
+   await early.register(db,uid);
+   if(req.method==='GET'&&req.url==='/api/v1/account-status'){
+    const membership=await early.status(db,uid);
+    const copies=await backup.list(db,uid);
+    json(res,200,{ok:true,early_access:membership,backups:copies.slice(0,31),
+      backup_enabled:!!backup.keyFromEnv(),backup_location:'same_database',retention_days:backup.DAYS},headers);return true;
+   }
+   if(req.method==='GET'&&req.url?.startsWith('/api/v1/backup-export?')){
+    const url=new URL(req.url,'https://localhost');
+    const day=url.searchParams.get('day');
+    const file=await backup.exportBackup(db,uid,day);
+    json(res,200,{ok:true,backup:file},headers);return true;
+   }
+   if(req.method==='POST'&&req.url==='/api/v1/delete-account'){
+    // Financial records are sensitive. Require a freshly opened Telegram Mini App
+    // in addition to a typed confirmation and a second UI confirm.
+    if(Math.floor(Date.now()/1000)-authDate>600)
+      throw forbidden('O‘chirish uchun Telegram Mini App’ni qayta oching',401);
+    const data=await readJson(req);
+    const result=await erase(db,uid,data);
+    json(res,200,{ok:true,...result},headers);return true;
+   }
    if(req.method==='GET'&&req.url==='/api/v1/workspaces'){
     json(res,200,{ok:true,...await workspaces(uid)},headers);return true;
    }
