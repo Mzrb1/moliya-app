@@ -140,7 +140,7 @@ async function restoreDailyBackup(){
   if(!state.online||!navigator.onLine||state.busy||state.queue.length)
    throw Error('Avval internetni ulang va barcha yozuvlarni sinxronlang');
   const day=$('daily-backup-day').value;
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day))throw Error('Zaxira sanasini tanlang');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw Error('Zaxira sanasini tanlang');
   if(!confirm(day+' sanasidagi zaxirada bor, ammo hozir yetishmayotgan kirim-chiqimlar, kategoriyalar va limitlarni qayta qo‘shasizmi? Mavjud yozuvlar o‘zgarmaydi.'))return;
   const word=prompt('Tiklash uchun TIKLA deb yozing:');
   if(word!=='TIKLA')return;
