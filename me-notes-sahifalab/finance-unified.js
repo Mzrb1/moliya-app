@@ -55,6 +55,7 @@ function compute(){
  const snapshot=cached()||{transactions:[],budgets:{}};
  const items=(snapshot.transactions||[]).map(t=>({...t}));
  const budgets={...(snapshot.budgets||{})};
+ let allocationEnabled=typeof snapshot.allocation_enabled==='boolean'?snapshot.allocation_enabled:w.kind==='personal';
  const prefs={categories:structuredClone(snapshot.category_options||F.BASE[w.kind]),
   keywords:structuredClone(snapshot.keywords||{income:{},expense:{}})};
  for(const op of state.queue){
@@ -69,6 +70,8 @@ function compute(){
    const index=items.findIndex(t=>t.id===op.transaction_id);
    if(index>=0){items[index]={...items[index],...op.entry};
     if(items[index].date.slice(0,7)!==state.month)items.splice(index,1);}
+  }else if(op.action==='allocation_toggle'){
+   allocationEnabled=op.enabled===true;
   }else if(op.action==='budget'&&op.month===state.month){
    if(Number(op.limit)===0)delete budgets[op.category];else budgets[op.category]=Number(op.limit);
   }else if(op.action==='category_add'){
@@ -84,9 +87,9 @@ function compute(){
    if(lst)prefs.keywords[op.kind][op.category]=lst.filter(x=>x!==op.word);
   }
  }
- const shadow={kind:w.kind,categories:prefs.categories,keywords:prefs.keywords,transactions:items,budgets:{[state.month]:budgets}};
+ const shadow={kind:w.kind,allocation_enabled:allocationEnabled,categories:prefs.categories,keywords:prefs.keywords,transactions:items,budgets:{[state.month]:budgets}};
  const summary=F.summary(shadow,state.month);
- return {items,summary,plan:F.salaryAllocation(shadow,state.month),w,prefs,closedAt:snapshot.closed_at||null,resetBackup:snapshot.reset_backup||null};
+ return {items,summary,allocationEnabled,plan:F.salaryAllocation(shadow,state.month),w,prefs,closedAt:snapshot.closed_at||null,resetBackup:snapshot.reset_backup||null};
 }
 function noteStatus(text){
  $('sync-status').textContent=text||((state.connecting?'⏳ Serverga ulanmoqda…':state.online?'🟢 Telegram bilan ulangan':'🟠 Offline / ulanmagan')+
@@ -203,7 +206,7 @@ async function fetchLedger(){
  // Pin an asynchronous response to the requested account and month, not the
  // account/month currently selected when it eventually arrives.
  if(data.workspace?.id!==wid||data.month!==month)throw Error('Serverdan boshqa oy yoki hisob kelgan');
- state.base[wid+'|'+month]={transactions:data.transactions,budgets:data.budgets,closed_at:data.closed_at||null,reset_backup:data.reset_backup||null,
+ state.base[wid+'|'+month]={transactions:data.transactions,budgets:data.budgets,allocation_enabled:data.allocation_enabled,closed_at:data.closed_at||null,reset_backup:data.reset_backup||null,
   category_options:data.category_options||F.BASE[workspace.kind],
   keywords:data.keywords||{income:{},expense:{}}};
  save();
@@ -327,17 +330,32 @@ function displayRows(target,items,limit=100){
 }
 function renderPlan(data){
  const container=$('allocation');container.replaceChildren();
+ const enabled=data.allocationEnabled,btn=$('allocation-toggle');
+ const pending=state.queue.some(op=>op.workspace_id===data.w.id&&op.action==='allocation_toggle');
+ btn.textContent=pending?'Saqlanmoqda…':enabled?'O‘chirish':'Yoqish';
+ btn.disabled=pending||!state.storageOK;
+ btn.onclick=()=>{
+  if(pending)return;
+  try{
+   enqueue({action:'allocation_toggle',enabled:!enabled});
+   alertMessage('Faqat «'+data.w.name+'» hisobining taqsimot sozlamasi o‘zgartirildi.',true);
+  }catch(err){alertMessage(err.message);}
+ };
+ $('allocation-scope').textContent=data.w.kind==='business'
+  ?'Faqat «Maosh» deb belgilangan kirim bo‘linadi. Savdo va xizmat tushumi bo‘linmaydi; bu haqiqiy pul o‘tkazmasi emas.'
+  :'Faqat shu hisobdagi «Maosh» kirimi taqsimlanadi. Boshqa hisoblardagi pullar o‘zgarmaydi.';
  const p=data.plan;
  const incomeRows=data.items.filter(x=>x.kind==='income');
  const unmatched=incomeRows.filter(x=>x.category!=='Maosh');
- const maybeSalary=data.w.kind==='personal'?data.items.filter(x=>isSalaryNote(x.note)&&x.category!=='Maosh'):[];
+ const maybeSalary=enabled?data.items.filter(x=>isSalaryNote(x.note)&&x.category!=='Maosh'):[];
  const editableSalary=maybeSalary.length===1&&maybeSalary[0].id&&!String(maybeSalary[0].id).startsWith('pending:')&&!data.closedAt?maybeSalary[0]:null;
  $('allocation-intro').textContent=p?'Rejadagi mablag‘lar (xarajat emas).':
-  data.w.kind!=='personal'?'Avtomatik taqsimot faqat «Shaxsiy moliyam» hisobidagi maosh uchun ishlaydi.':
+  !enabled?'Bu hisobda avtomatik taqsimot o‘chiq. Xohlasangiz «Yoqish» tugmasini bosing.':
   maybeSalary.some(x=>x.kind==='expense')?'Ehtimol, oyligingiz xarajat deb yozilgan. Yozuvni tekshirib, «Maosh» kirimiga to‘g‘rilang.':
   unmatched.length?'Kirim saqlangan, lekin «Maosh» kategoriyasida emas. «Yozuvlar» bo‘limida ushbu kirimni «Maosh» kategoriyasiga tahrirlang.':
   'Oylik kiritish uchun Asosiy sahifada «+4 mln oylik» deb yozing.';
  if(!p){
+  if(!enabled)return;
   if(editableSalary){
    const fix=el('button','btn alt','💰 Oylik deb to‘g‘rilash');
    fix.type='button';
@@ -350,9 +368,9 @@ function renderPlan(data){
     }catch(e){alertMessage(e.message);}
    };
    container.append(fix);
-  }else if(data.w.kind==='personal'&&(unmatched.length||maybeSalary.length)){
+  }else if(unmatched.length||maybeSalary.length){
    const fix=el('button','btn alt','🧾 Kirimni tekshirish');fix.type='button';fix.onclick=()=>chooseView('records');container.append(fix);
-  }else if(data.w.kind==='personal'){
+  }else {
    const start=el('button','btn alt','⚡ Oylik kiritish');start.type='button';
    start.onclick=()=>{chooseView('home');$('quick-text').focus();};container.append(start);
   }
