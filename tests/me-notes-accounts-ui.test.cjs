@@ -51,7 +51,8 @@ test('/start shows active account once, not every workspace as numbered buttons'
  const menu=bot.slice(bot.indexOf('async function choose(uid'),bot.indexOf('const help='));
  assert.match(menu,/async function choose\(uid,expanded=false\)/);
  assert.match(menu,/if\(expanded\)/);
- assert.match(menu,/📱 Moliya boshqaruvi/);
+ assert.match(menu,/callback_data:'help:chat'/);
+ assert.doesNotMatch(menu,/web_app:/);
  assert.doesNotMatch(start,/choose\(uid,true\)/);
 });
 test('Full list only shown via /hisob with active marker and unique IDs',()=>{
