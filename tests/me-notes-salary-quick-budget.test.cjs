@@ -45,6 +45,17 @@ test('Mixed quick entries yield the expected Ehson Kelajak Oyin Ro zgor Biznes',
   [4000000,100000,390000,390000,1404000,1716000]);
  assert.equal(F.summary({kind:'personal',categories:F.BASE.personal,transactions:saved,budgets:{[month]:{}}},month).net,3975000);
 });
+test('Missing Maosh offers edit-in-place and does not add another income',()=>{
+ assert.match(js,/Oylik deb to‘g‘rilash/);
+ assert.match(js,/editableSalary\.kind|editableSalary\.note/);
+ assert.match(js,/enqueue\(\{action:'edit',transaction_id:editableSalary\.id/);
+ assert.doesNotMatch(js,/action:'add',entry:\{kind:'income',category:'Maosh',amount:editableSalary\.amount/);
+});
+test('Unsigned ambiguous advance is not silently counted as salary',()=>{
+ const parse=parser();
+ assert.equal(parse('2 mln avans')[0].kind,'expense');
+ assert.equal(parse('+2 mln avans')[0].category,'Maosh');
+});
 test('Family/business income does not trigger a personal allocation',()=>{
  for(const kind of ['family','business']){
   const parse=parser(kind);
