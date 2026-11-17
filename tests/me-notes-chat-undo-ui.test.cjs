@@ -19,5 +19,8 @@ test('Telegram callback answers, removes one-time button, and retains /bekor leg
  assert.match(bot,/editMessageReplyMarkup/);
  assert.match(bot,/reply_markup:\{inline_keyboard:\[\]\}/);
  assert.match(bot,/if\(command==='\/bekor'\)/);
- assert.match(bot,/const result=tag<0/);
+ const legacy=bot.slice(bot.indexOf("if(command==='/bekor')"),bot.indexOf("if(command==='/limit')"));
+ assert.match(legacy,/undo\.singleButton\(String\(item\.id\)\)/);
+ assert.match(legacy,/undo\.listButton\(source\)/);
+ assert.doesNotMatch(legacy,/undo\.one\(|undo\.list\(|DELETE FROM/,'old slash command cannot delete without confirmation');
 });
