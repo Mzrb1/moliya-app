@@ -318,9 +318,36 @@ function displayRows(target,items,limit=100){
 function renderPlan(data){
  const container=$('allocation');container.replaceChildren();
  const p=data.plan;
+ const incomeRows=data.items.filter(x=>x.kind==='income');
+ const unmatched=incomeRows.filter(x=>x.category!=='Maosh');
+ const maybeSalary=data.w.kind==='personal'?data.items.filter(x=>isSalaryNote(x.note)&&x.category!=='Maosh'):[];
+ const editableSalary=maybeSalary.length===1&&maybeSalary[0].id&&!String(maybeSalary[0].id).startsWith('pending:')&&!data.closedAt?maybeSalary[0]:null;
  $('allocation-intro').textContent=p?'Rejadagi mablag‘lar (xarajat emas).':
-  'Maosh kirimidan keyin taqsimot ko‘rinadi.';
- if(!p)return;
+  data.w.kind!=='personal'?'Avtomatik taqsimot faqat «Shaxsiy moliyam» hisobidagi maosh uchun ishlaydi.':
+  maybeSalary.some(x=>x.kind==='expense')?'Ehtimol, oyligingiz xarajat deb yozilgan. Yozuvni tekshirib, «Maosh» kirimiga to‘g‘rilang.':
+  unmatched.length?'Kirim saqlangan, lekin «Maosh» kategoriyasida emas. «Yozuvlar» bo‘limida ushbu kirimni «Maosh» kategoriyasiga tahrirlang.':
+  'Oylik kiritish uchun Asosiy sahifada «+4 mln oylik» deb yozing.';
+ if(!p){
+  if(editableSalary){
+   const fix=el('button','btn alt','💰 Oylik deb to‘g‘rilash');
+   fix.type='button';
+   fix.onclick=()=>{
+    if(!confirm('«'+editableSalary.note+'» '+money(editableSalary.amount)+' yozuvini «Maosh» kirimiga o‘zgartirasizmi? Eski yozuv tahrirlanadi, yangi pul qo‘shilmaydi.'))return;
+    try{
+     enqueue({action:'edit',transaction_id:editableSalary.id,
+      entry:{kind:'income',category:'Maosh',amount:editableSalary.amount,note:editableSalary.note,date:editableSalary.date}});
+     alertMessage('Yozuv «Maosh» kirimiga tahrirlandi. Byudjet taqsimoti yangilanadi.',true);
+    }catch(e){alertMessage(e.message);}
+   };
+   container.append(fix);
+  }else if(data.w.kind==='personal'&&(unmatched.length||maybeSalary.length)){
+   const fix=el('button','btn alt','🧾 Kirimni tekshirish');fix.type='button';fix.onclick=()=>chooseView('records');container.append(fix);
+  }else if(data.w.kind==='personal'){
+   const start=el('button','btn alt','⚡ Oylik kiritish');start.type='button';
+   start.onclick=()=>{chooseView('home');$('quick-text').focus();};container.append(start);
+  }
+  return;
+ }
  container.append(el('div','value',money(p.salary)));
  for(const [field,label] of F.SALARY_BUCKETS)container.append(line(label,money(p[field])));
  if(p.hardShortfall>0)container.append(el('div','notice','⚠️ Qat’iy Ro‘zg‘or limitlari uchun '+money(p.hardShortfall)+' yetishmaydi. Qat’iy limitlar avtomatik kamaytirilmaydi.'));
@@ -622,6 +649,15 @@ function render(){
  if(editingId)fillCategory('edit-category',$('edit-kind').value);
  noteStatus();
 }
+// Faqat shaxsiy hisobdagi aniq maosh iborasi «+»siz bo‘lsa ham daromad bo‘lsin.
+function isSalaryNote(note){
+ return /^(?:oylik|oyligim|maosh|maoshim|ish haqi|ish xaqi|ish haqim|avans|ishdagi oylik)$/.test(F.normalizeKeyword(note));
+}
+function normaliseQuickKind(parsed,workspaceKind,rawLine){
+ if(workspaceKind!=='personal'||parsed.kind!=='expense'||!/^(?:oylik|oyligim|maosh|maoshim)$/.test(F.normalizeKeyword(parsed.note)))return parsed;
+ if(/[-+]/.test(String(rawLine)))return parsed; // aniq manfiy xarajat o‘zgarib ketmasin
+ return {...parsed,kind:'income'};
+}
 function parseInput(raw){
  const list=F.parseList(raw);
  let items;
@@ -635,8 +671,14 @@ function parseInput(raw){
  }
  const w=current();
  const prefs=compute()?.prefs||{categories:F.BASE[w.kind],keywords:{income:{},expense:{}}};
- return items.map(x=>({kind:x.kind,amount:x.amount,date:F.today(),note:x.note,
-  category:F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},x.kind,x.note)}));
+ const lines=String(raw).split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ if(lines.length>1&&/^(?:bugungi\s+)?(?:xarajat(?:lar(?:im)?)?|kirim(?:lar)?|ro['‘ʻ]yxat|royxat)(?:\s+(?:ro['‘ʻ]yxati|royxati))?\s*:?$/i.test(lines[0]))lines.shift();
+ return items.map((x,i)=>{
+  const row=normaliseQuickKind(x,w.kind,lines[i]||'');
+  const category=row.kind==='income'&&w.kind==='personal'&&isSalaryNote(row.note)&&prefs.categories.income.includes('Maosh')
+   ?'Maosh':F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},row.kind,row.note);
+  return {kind:row.kind,amount:row.amount,date:F.today(),note:row.note,category};
+ });
 }
 function showPreview(){
  const raw=$('quick-text').value;
@@ -665,7 +707,8 @@ function previewSimple(){
  if(!w||!note||!Number.isSafeInteger(value)||value<1||value>1000000000000){target.textContent='';return;}
  try{
   const prefs=compute()?.prefs||{categories:F.BASE[w.kind],keywords:{income:{},expense:{}}};
-  const category=F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},simpleKind,note);
+  const category=simpleKind==='income'&&w.kind==='personal'&&isSalaryNote(note)&&prefs.categories.income.includes('Maosh')
+   ?'Maosh':F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},simpleKind,note);
   target.textContent='Kategoriya: '+category+' · '+money(value);
  }catch(e){target.textContent='';}
 }
@@ -678,7 +721,8 @@ function saveSimpleEntry(e){
   if(data.closedAt)throw Error('Bu oy arxivlangan. Avval qayta oching');
   const kind=simpleKind,amount=F.amount(Number($('simple-amount').value)),note=$('simple-note').value.trim();
   if(!note||note.length>160)throw Error('Izoh kiriting');
-  const category=F.categoryFor({kind:w.kind,categories:data.prefs.categories,keywords:data.prefs.keywords},kind,note);
+  const category=kind==='income'&&w.kind==='personal'&&isSalaryNote(note)&&data.prefs.categories.income.includes('Maosh')
+   ?'Maosh':F.categoryFor({kind:w.kind,categories:data.prefs.categories,keywords:data.prefs.keywords},kind,note);
   enqueue({action:'add',entry:{kind,amount,date:F.today(),category,note}});
   $('simple-amount').value='';
   $('simple-note').value=kind==='income'?'':'';
@@ -778,7 +822,9 @@ function setup(){
    const parts=parseInput($('quick-text').value);
    enqueue(parts.length===1?{action:'add',entry:parts[0]}:{action:'add_many',entries:parts});
    $('quick-text').value='';showPreview();
-   alertMessage(parts.length+' ta yozuv telefonda saqlandi, serverga yuboriladi.',true);
+   const plan=compute()?.plan;
+   alertMessage(parts.length+' ta yozuv telefonda saqlandi, serverga yuboriladi.'+
+    (plan&&parts.some(x=>x.kind==='income'&&x.category==='Maosh')?' ✅ Oylik taqsimoti Byudjet bo‘limida hisoblandi.':''),true);
   }catch(err){alertMessage(err.message);}
  };
  $('manual-date').value=F.today();

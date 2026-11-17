@@ -33,6 +33,11 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inl
 .record-tools>.card{padding:13px 0 0;box-shadow:none;border:0;margin:0}
 .recent-card{padding:13px 15px}.recent-card h2{font-size:15px;margin:0}.recent-card .btn{padding:8px 11px;min-height:35px;font-size:12px}
 @media(max-width:380px){.balance-card,.entry-card,.recent-card{padding:12px}.balance-card .metric .number{font-size:14px}}
+
+.entry-quick h2{margin-bottom:6px}.quick-helper{margin:0 0 10px;line-height:1.5}
+.entry-quick textarea{min-height:70px;max-height:170px;resize:vertical}
+.entry-quick .btn{width:100%}.simple-panel{border-top:1px solid var(--stroke);margin-top:12px;padding-top:10px}
+.simple-panel summary{cursor:pointer;color:#345778;font-size:13px;font-weight:750}.simple-panel[open] form{padding-top:9px}
 </style></head><body><main>
 <header class="top"><div class="logo">ME</div><div class="grow"><h1 class="title">ME Notes</h1><div class="sub">Moliya boshqaruvi</div></div><button class="header-action" type="button" id="open-settings" aria-label="Sozlamalar">⚙️</button></header>
 <div id="notices" role="status" aria-live="polite"></div><div id="sync-status" class="status">Ulanish tekshirilmoqda…</div>
@@ -56,8 +61,14 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inl
  <span class="tiny">Hisoblangan qoldiq · Bu bankdagi haqiqiy qoldiq emas</span><div class="value" id="net">—</div>
  <div class="metrics"><div class="metric"><span class="tiny">Kirim</span><span class="number green" id="income">—</span></div><div class="metric"><span class="tiny">Chiqim</span><span class="number red" id="expense">—</span></div></div>
 </div>
-<div class="card entry-card"><h2>✍️ Pul kiritish</h2>
- <p id="first-entry-hint" class="entry-help hidden">👋 Ishni boshlash uchun oyligingizni yozing. Keyin «Xarajat» orqali sarflaringizni sinab ko‘ring.</p>
+<div class="card entry-card">
+ <p id="first-entry-hint" class="entry-help hidden">👋 Ishni boshlash uchun <strong>+4 mln oylik</strong> deb yozib saqlang. Keyin 25 ming taksi yozib ko‘ring.</p>
+<div class="entry-quick"><h2>⚡ Tezkor yozuv</h2><p class="tiny quick-helper">Misol: <strong>+4 mln oylik</strong>, 25 ming taksi yoki tushlik 35000. Bir xabarda bir nechta yozuv ham mumkin.</p>
+<form id="quick-form"><textarea id="quick-text" maxlength="3000" placeholder="+4 mln oylik&#10;25 ming taksi&#10;Tushlik 35000" required></textarea>
+<p id="quick-month-hint" class="tiny gap-top hidden"></p>
+<div id="quick-preview" class="tiny gap-top"></div><button id="quick-save" class="btn gap-top" type="submit">Saqlash</button></form></div>
+
+<details id="simple-panel" class="simple-panel"><summary>＋ Alohida summa va izoh bilan kiritish</summary>
  <form id="simple-form">
   <div class="entry-switch" role="group" aria-label="Yozuv turi">
    <button type="button" id="simple-income" class="entry-mode" aria-pressed="true">＋ Kirim</button>
@@ -68,16 +79,12 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inl
   <div id="simple-preview" class="tiny gap-top" aria-live="polite"></div>
   <p id="simple-month-hint" class="tiny gap-top hidden"></p>
   <button id="simple-save" class="btn gap-top" type="submit">Saqlash</button>
- </form>
+ </form></details>
 </div>
 <div class="card recent-card"><div class="headline"><h2>So‘nggi yozuvlar</h2><button type="button" data-view="records" class="btn alt">Hammasi</button></div><div id="recent"></div></div>
 </section>
 <section id="view-records" class="hidden">
-<details class="card record-tools"><summary>⚡ Ko‘p yozuv yoki batafsil kiritish</summary>
-<div class="card"><h2>⚡ Tezkor yozuv</h2>
-<form id="quick-form"><textarea id="quick-text" maxlength="3000" placeholder="25 ming taksi&#10;Tushlik 35000&#10;+3 mln oylik" required></textarea>
-<p id="quick-month-hint" class="tiny gap-top hidden"></p>
-<div id="quick-preview" class="tiny gap-top"></div><button id="quick-save" class="btn gap-top" type="submit">Saqlash</button></form></div>
+<details class="card record-tools"><summary>✍️ Batafsil kiritish</summary>
 <div class="card"><div class="headline"><h2>✍️ Batafsil kiritish</h2><button id="manual-toggle" type="button" class="btn alt" aria-expanded="false" aria-controls="manual-form">Ochish</button></div>
 <form id="manual-form" class="hidden">
 <div class="field-grid"><div><label for="manual-kind">Turi</label><select id="manual-kind"><option value="expense">Xarajat</option><option value="income">Daromad</option></select></div>
