@@ -298,3 +298,30 @@ test('Ro‘zg‘or limiti tugab qolganida yangi xarajatda ogohlantirish',()=>{
  const r=F.addTransaction(w,{kind:'expense',amount:25000,date:'2026-11-13',category:'Transport'});
  assert.match(r.alert,/mablag‘i qolmagan/);
 });
+
+test('Allocation toggle preserves personal old default and separate family/business settings',()=>{
+ const month='2026-11';
+ for(const kind of ['personal','family','business']){
+  const {w}=fixture(kind);
+  F.addTransaction(w,{kind:'income',amount:5000000,date:'2026-11-17',category:'Maosh',note:'oylik'});
+  assert.equal(F.allocationEnabled(w),kind==='personal');
+  assert.equal(F.salaryAllocation(w,month)!==null,kind==='personal');
+  w.allocation_enabled=true;
+  const plan=F.salaryAllocation(w,month);
+  assert.equal(plan.salary,5000000);
+  assert.equal(plan.ehson+plan.kelajak+plan.oyin+plan.rozgor+plan.biznes,5000000);
+  w.allocation_enabled=false;
+  assert.equal(F.salaryAllocation(w,month),null);
+  assert.equal(F.summary(w,month).income,5000000);
+ }
+});
+test('New workspace allocation preference is independent and survives JSON local validation',()=>{
+ const s=F.fresh();
+ const p=F.create(s,'personal','Men'),f=F.create(s,'family','Oilam'),b=F.create(s,'business','Biznes');
+ assert.equal(p.allocation_enabled,true);assert.equal(f.allocation_enabled,false);assert.equal(b.allocation_enabled,false);
+ f.allocation_enabled=true;
+ const restored=F.validate(JSON.parse(JSON.stringify(s)));
+ assert.equal(restored.workspaces.find(x=>x.id===f.id).allocation_enabled,true);
+ assert.equal(restored.workspaces.find(x=>x.id===b.id).allocation_enabled,false);
+ assert.equal(restored.workspaces.find(x=>x.id===p.id).allocation_enabled,true);
+});
