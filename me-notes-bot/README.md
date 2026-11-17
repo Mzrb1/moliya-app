@@ -54,7 +54,15 @@ Telegram chat bazasi bilan Mini App brauzer xotirasi sinxronlashmagan.
 - /limit Transport 100000: joriy oylik limit
 - /hisobot: tanlangan hisob natijasi
 - /taqsimot: Maosh kategoriyasidagi oylik daromadni 5 bo‘limga ajratib ko‘rsatish
-- /bekor: tanlangan hisobdagi oxirgi yozuvni o‘chirish
+- /bekor: tanlangan hisobdagi oxirgi yozuvni ko‘rsatish va tasdiqlash tugmasini chiqarish (bir bosishda o‘chirmaydi)
+
+## Har bir xabar uchun aniq bekor qilish
+- Endi har bir yangi kirim/xarajat tasdiq xabari ostida `↩️ Shu yozuvni bekor qilish` tugmasi bor. Tugma aynan shu yozuvning o‘zgarmas UUIDsiga bog‘langan: yangi yozuvlar yaratilsa ham eski tugma eskisini o‘chiradi.
+- Bir xabarda 2–20 ta yozuv saqlansa, `↩️ Shu ro‘yxatni bekor qilish` tugmasi aynan o‘sha Telegram xabaridagi qolgan yozuvlarni o‘chiradi.
+- Telegram UID va hisob egasi har safar tekshiriladi; boshqa odamning hisobiga tegib bo‘lmaydi. Oyni arxivlasangiz yoki hisobni yopsangiz, bekor qilish ishlamaydi.
+- Bir marta o‘chirilgandan keyin tugma olib tashlanadi; takroriy bosish pulni ikki marta o‘zgartirmaydi. Telegram xabarini qayta yuborsa ham oldin bekor qilingan kirim/xarajat qayta yaratilmaydi.
+- **Eski** bot xabarlaridagi `/bekor` oddiy buyruq bo‘lib qoladi — uni o‘sha eski xabarga bog‘lashning imkoni yo‘q. Endi u oxirgi yozuvni **faqat ko‘rsatadi** va tasdiqlash tugmasini so‘raydi; darhol o‘chirmaydi.
+- Moliyaviy ma’lumotlar Turso’da qoladi, foydalanuvchining oldingi ma’lumotlari ommaviy migratsiya qilinmaydi.
 
 ## Ma'lumotlar chegarasi
 Telegram chatdagi yozuvlar Turso bazasida saqlanadi.
