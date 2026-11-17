@@ -63,7 +63,8 @@ function makeFinanceApi({db,botToken,ensure}){
   'CREATE TABLE IF NOT EXISTS mn_month_reset_meta (id TEXT PRIMARY KEY,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,month TEXT NOT NULL,created TEXT NOT NULL,restored_at TEXT)',
   'CREATE TABLE IF NOT EXISTS mn_month_reset_tx (reset_id TEXT NOT NULL,id TEXT NOT NULL,uid TEXT NOT NULL,workspace_id TEXT NOT NULL,update_id INTEGER NOT NULL,kind TEXT NOT NULL,category TEXT NOT NULL,amount INTEGER NOT NULL,note TEXT,day TEXT NOT NULL,created TEXT NOT NULL,PRIMARY KEY(reset_id,id))',
   'CREATE TABLE IF NOT EXISTS mn_month_reset_budget (reset_id TEXT NOT NULL,workspace_id TEXT NOT NULL,month TEXT NOT NULL,category TEXT NOT NULL,limit_amount INTEGER NOT NULL,PRIMARY KEY(reset_id,category))',
-  'CREATE TABLE IF NOT EXISTS mn_workspace_archive (workspace_id TEXT PRIMARY KEY,uid TEXT NOT NULL,archived_at TEXT NOT NULL)'
+  'CREATE TABLE IF NOT EXISTS mn_workspace_archive (workspace_id TEXT PRIMARY KEY,uid TEXT NOT NULL,archived_at TEXT NOT NULL)',
+  'CREATE TABLE IF NOT EXISTS mn_workspace_allocation (workspace_id TEXT PRIMARY KEY,uid TEXT NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),updated_at TEXT NOT NULL)'
  ],'write');
   await early.initEarlyAccess(db);
   await backup.init(db);
@@ -73,6 +74,11 @@ function makeFinanceApi({db,botToken,ensure}){
   const r=await db.execute({sql:'SELECT id,kind,name FROM mn_workspaces WHERE uid=? AND id=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=mn_workspaces.id)',args:[uid,wid]});
   if(!r.rows.length)throw forbidden('Bu hisobga kirishga ruxsat yo‘q');
   return r.rows[0];
+ }
+ // Allocation is account-scoped, never tied to the Telegram user's current workspace.
+ async function allocationEnabled(uid,w){
+  const rs=await db.execute({sql:'SELECT enabled FROM mn_workspace_allocation WHERE uid=? AND workspace_id=?',args:[uid,w.id]});
+  return rs.rows.length?Number(rs.rows[0].enabled)===1:w.kind==='personal';
  }
  async function preferences(w){
   const cats=JSON.parse(JSON.stringify(F.BASE[w.kind]));
@@ -162,17 +168,18 @@ function makeFinanceApi({db,botToken,ensure}){
   const transactions=rows.rows.map(r=>({id:String(r.id),kind:r.kind,category:String(r.category),amount:Number(r.amount),note:String(r.note||''),date:String(r.day)}));
   const budgets=Object.fromEntries(bs.rows.map(r=>[String(r.category),Number(r.limit_amount)]));
   const prefs=await preferences(w);
-  const shadow={kind:w.kind,categories:prefs.categories,keywords:prefs.keywords,budgets:{[month]:budgets},transactions};
+  const allocation_enabled=await allocationEnabled(uid,w);
+  const shadow={kind:w.kind,allocation_enabled,categories:prefs.categories,keywords:prefs.keywords,budgets:{[month]:budgets},transactions};
   const summary=F.summary(shadow,month);
   const closedAt=await closed(uid,wid,month);
   const plan=F.salaryAllocation(shadow,month);
   return {workspace:{id:w.id,kind:w.kind,name:w.name},month,closed_at:closedAt,reset_backup:await resetBackup(uid,wid,month),transactions,more:false,
-    totals:{income:summary.income,expense:summary.expense,net:summary.net},categories:summary.budgets,category_options:prefs.categories,keywords:prefs.keywords,budgets,plan};
+    totals:{income:summary.income,expense:summary.expense,net:summary.net},categories:summary.budgets,category_options:prefs.categories,keywords:prefs.keywords,budgets,plan,allocation_enabled};
  }
  async function execute(uid,body){
   const opId=body?.op_id,wid=body?.workspace_id,action=body?.action;
   if(!validId(opId)||typeof wid!=='string'||wid.length>128)throw Error('Amal ID yoki hisob noto‘g‘ri');
-  if(!['add','add_many','budget','delete','edit','switch','new_workspace','import','category_add','category_delete','keyword_add','keyword_delete','month_close','month_reopen','month_clear','month_unclear','workspace_rename','workspace_archive','workspace_restore'].includes(action))throw Error('Amal turi noto‘g‘ri');
+  if(!['add','add_many','budget','delete','edit','switch','new_workspace','import','category_add','category_delete','keyword_add','keyword_delete','month_close','month_reopen','month_clear','month_unclear','workspace_rename','workspace_archive','workspace_restore','allocation_toggle'].includes(action))throw Error('Amal turi noto‘g‘ri');
   const previous=await db.execute({sql:'SELECT uid FROM mn_api_ops WHERE id=?',args:[opId]});
   if(previous.rows.length){
    if(previous.rows[0].uid!==uid)throw forbidden('Amal boshqa foydalanuvchiga tegishli');
@@ -217,6 +224,12 @@ function makeFinanceApi({db,botToken,ensure}){
      args:[uid,source,x.source_id,wid,transactionId]});
    }
    result={attempted:entries.length};
+  }else if(action==='allocation_toggle'){
+   if(typeof body.enabled!=='boolean')throw Error('Taqsimot holati noto‘g‘ri');
+   steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
+   steps.push({sql:'INSERT INTO mn_workspace_allocation(workspace_id,uid,enabled,updated_at) VALUES(?,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at WHERE mn_workspace_allocation.uid=excluded.uid',
+    args:[wid,uid,body.enabled?1:0,now]});
+   result={allocation_enabled:body.enabled};
   }else if(action==='budget'){
    if(!prefs.categories.expense.includes(body.category))throw Error('Kategoriya noto‘g‘ri');
    if(!validMonth(body.month))throw Error('Oy noto‘g‘ri');
