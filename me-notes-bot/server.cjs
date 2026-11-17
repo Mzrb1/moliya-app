@@ -80,8 +80,10 @@ async function active(uid){
  return q.rows[0];
 }
 async function choose(uid,expanded=false){
+ // The Mini App stays in the bottom Telegram Menu/Main Mini App.
+ // Chat messages lead with the chat-based expense/income workflow instead.
  const keyboard=[
-  [{text:'📱 Moliya boshqaruvi',web_app:{url:FINANCE_MINI_APP_URL}}]
+  [{text:'❓ Yordam',callback_data:'help:chat'}]
  ];
  keyboard.push([{text:'👥 Hamjamiyat',callback_data:'cm:group'},{text:'🔔 Xabarnomalar',callback_data:'cm:optmenu'}]);
  if(administrator.isAdmin(uid))keyboard.push([{text:'🛡 Admin boshqaruvi',callback_data:'adm:home'}]);
@@ -94,7 +96,7 @@ async function choose(uid,expanded=false){
    text:(x.id===w.id?'✅ ':'📂 ')+x.name+' · '+F.KINDS[x.kind]+' · '+String(x.id).slice(-6),
    callback_data:'use:'+x.id
   }]));
-  keyboard.push([{text:'⚙️ Hisoblarni boshqarish',web_app:{url:FINANCE_MINI_APP_URL}}]);
+  keyboard.push([{text:'⚙️ Hisoblarni boshqarish yo‘li',callback_data:'help:accounts'}]);
  }
  return {inline_keyboard:keyboard};
 }
@@ -104,7 +106,7 @@ const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 m
  '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni bekor qilish\n'+
  'ℹ️ /yordam — yordam\n'+
  '👥 /guruh — hamjamiyatga qo‘shilish\n🔔 /obuna — yangilik va reklama xabarnomalari\n'+
- '📱 /start — Moliya Mini App tugmasi';
+ '📱 Mini App — pastdagi Menyu yoki bot profilidagi Ochish tugmasi';
 function checkSecret(input){
  if(typeof input!=='string')return false;
  const a=Buffer.from(input),b=Buffer.from(secret);
@@ -227,7 +229,7 @@ async function handleMessage(update){
  if(command==='/start'){
   try{await api('setChatMenuButton',{chat_id,menu_button:financeMenuButton()});}
   catch(e){console.error('ME Notes chat menu setup failed:',String(e.message).slice(0,100));}
-  await send(chat_id,'📒 ME Notes\n📂 Faol hisob: '+w.name+'\nXarajat: 25 ming taksi\nBuyruqlar: /yordam',{reply_markup:await choose(uid)});return;
+  await send(chat_id,'📒 ME Notes\n📂 Faol hisob: '+w.name+'\n\n✍️ Xarajat va daromadni shu chatning o‘zida yozishingiz mumkin!\n➖ Xarajat: 25 ming taksi\n➕ Daromad: +3 mln oylik\n📊 Hisobot: /hisobot\n\n❓ Quyidagi Yordam tugmasida boshqa buyruqlar ham bor.\n📱 Mini App: pastdagi Menyu yoki bot profilidagi Ochish.',{reply_markup:await choose(uid)});return;
  }
  if(command==='/hisob'){await send(chat_id,'Faol hisob: '+w.name+'\nHisobni tanlang yoki boshqaring:',{reply_markup:await choose(uid,true)});return;}
  if(command==='/yordam'||command==='/help'){await send(chat_id,help);return;}
@@ -301,6 +303,11 @@ async function handleCallback(update){
  if(await communityBot.handleCallback(uid,cmd,cb.id))return;
  if(await adminBot.handleCallback(uid,cmd,cb.id))return;
  await api('answerCallbackQuery',{callback_query_id:cb.id});
+ if(cmd==='help:chat'){await send(cb.message.chat.id,help);return;}
+ if(cmd==='help:accounts'){
+  await send(cb.message.chat.id,'📁 Hisoblarni almashtirish: /hisob buyrug‘ini yuboring va ro‘yxatdan tanlang.\n\n➕ Yangi hisob yaratish, nomini o‘zgartirish, yopish va tiklash: pastdagi Menyu → ⚙️ Boshqarish.\n\n✍️ Xarajat va daromadni shu chatning o‘zida yozishingiz mumkin.');
+  return;
+ }
  if(cmd.startsWith('use:')){
   const id=cmd.slice(4);
   const q=await db.execute({sql:'SELECT id,name FROM mn_workspaces w WHERE id=? AND uid=? AND NOT EXISTS (SELECT 1 FROM mn_workspace_archive a WHERE a.workspace_id=w.id)',args:[id,uid]});
@@ -311,7 +318,7 @@ async function handleCallback(update){
  if(cmd.startsWith('new:')){
   // Old Telegram messages may contain obsolete quick-create callback buttons.
   // Never create duplicate accounts from stale messages.
-  await send(cb.message.chat.id,'Yangi hisob ochish va mavjudlarini boshqarish uchun /start → Moliya boshqaruvi → Hisoblarni boshqarish bo‘limiga kiring.');
+  await send(cb.message.chat.id,'Hisob yaratish va boshqarish: pastdagi Menyu → ⚙️ Boshqarish. Hisobni almashtirish: /hisob.');
  }
 }
 async function main(){
