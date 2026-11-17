@@ -444,3 +444,52 @@ test('Archived account cannot be restored by another user',async()=>{
  assert.equal((await api.workspaces('222')).archived.length,0);
  db.close();
 });
+
+
+test('Workspace opt-in salary allocation is isolated across personal, family and business accounts',async()=>{
+ const {db,api}=await freshDb();
+ const day='2026-11-17',month='2026-11';
+ const family=(await api.execute('111',{op_id:'ws_alloc_family_new_001',workspace_id:'personal-111',action:'new_workspace',new_kind:'family',name:'Sevarga'})).workspace_id;
+ const business=(await api.execute('111',{op_id:'ws_alloc_business_new_001',workspace_id:family,action:'new_workspace',new_kind:'business',name:'Savdo'})).workspace_id;
+ await api.execute('111',{op_id:'ws_alloc_personal_pay_1',workspace_id:'personal-111',action:'add',entry:{kind:'income',amount:4000000,date:day,category:'Maosh',note:'oylik'}});
+ await api.execute('111',{op_id:'ws_alloc_family_pay_01',workspace_id:family,action:'add',entry:{kind:'income',amount:6000000,date:day,category:'Maosh',note:'oylik'}});
+ await api.execute('111',{op_id:'ws_alloc_business_sale_1',workspace_id:business,action:'add',entry:{kind:'income',amount:9000000,date:day,category:'Savdo tushumi',note:'savdo'}});
+ await api.execute('111',{op_id:'ws_alloc_business_pay_01',workspace_id:business,action:'add',entry:{kind:'income',amount:2500000,date:day,category:'Maosh',note:'oylik'}});
+ let personal=await api.ledger('111','personal-111',month),fam=await api.ledger('111',family,month),biz=await api.ledger('111',business,month);
+ assert.equal(personal.allocation_enabled,true);
+ assert.equal(personal.plan.salary,4000000);
+ assert.equal(fam.allocation_enabled,false);assert.equal(fam.plan,null);
+ assert.equal(biz.allocation_enabled,false);assert.equal(biz.plan,null);
+ await api.execute('111',{op_id:'ws_alloc_family_toggle_1',workspace_id:family,action:'allocation_toggle',enabled:true});
+ fam=await api.ledger('111',family,month);
+ assert.equal(fam.allocation_enabled,true);assert.equal(fam.plan.salary,6000000);
+ biz=await api.ledger('111',business,month);
+ assert.equal(biz.allocation_enabled,false);assert.equal(biz.plan,null);
+ await api.execute('111',{op_id:'ws_alloc_business_toggle_1',workspace_id:business,action:'allocation_toggle',enabled:true});
+ biz=await api.ledger('111',business,month);
+ assert.equal(biz.allocation_enabled,true);
+ assert.equal(biz.plan.salary,2500000,'Sales income must not be split as personal salary');
+ assert.equal(biz.totals.income,11500000,'Split must not create or move transactions');
+ personal=await api.ledger('111','personal-111',month);
+ assert.equal(personal.plan.salary,4000000);
+ await api.execute('111',{op_id:'ws_alloc_family_toggle_0',workspace_id:family,action:'allocation_toggle',enabled:false});
+ assert.equal((await api.ledger('111',family,month)).plan,null);
+ assert.equal((await api.ledger('111',business,month)).plan.salary,2500000);
+ db.close();
+});
+test('Toggling allocation is owned, strictly boolean, idempotent and preserved on archive',async()=>{
+ const {db,api}=await freshDb();
+ const family=(await api.execute('111',{op_id:'ws_alloc_guard_family_new',workspace_id:'personal-111',action:'new_workspace',new_kind:'family',name:'Oilaviy reja'})).workspace_id;
+ await assert.rejects(()=>api.execute('222',{op_id:'ws_alloc_guard_other_user',workspace_id:family,action:'allocation_toggle',enabled:true}),/ruxsat/);
+ await assert.rejects(()=>api.execute('111',{op_id:'ws_alloc_guard_invalid',workspace_id:family,action:'allocation_toggle',enabled:'true'}),/noto‘g‘ri/);
+ const update={op_id:'ws_alloc_guard_enable_001',workspace_id:family,action:'allocation_toggle',enabled:true};
+ assert.equal((await api.execute('111',update)).allocation_enabled,true);
+ assert.equal((await api.execute('111',update)).already,true);
+ let row=await db.execute({sql:'SELECT enabled,uid FROM mn_workspace_allocation WHERE workspace_id=?',args:[family]});
+ assert.equal(row.rows.length,1);assert.equal(Number(row.rows[0].enabled),1);assert.equal(row.rows[0].uid,'111');
+ await api.execute('111',{op_id:'ws_alloc_guard_archive_01',workspace_id:family,action:'workspace_archive',confirm:'YOP'});
+ await api.execute('111',{op_id:'ws_alloc_guard_restore_01',workspace_id:'personal-111',action:'workspace_restore',target_workspace_id:family,confirm:'TIKLA'});
+ assert.equal((await api.ledger('111',family,'2026-11')).allocation_enabled,true);
+ assert.equal((await api.ledger('222','personal-222','2026-11')).allocation_enabled,true);
+ db.close();
+});
