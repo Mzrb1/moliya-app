@@ -15,6 +15,7 @@ async function restoreMissing(db,uid,day,body,{key}={}){
   ['mn_extra_categories',['workspace_id','kind','name']],
   ['mn_keyword_aliases',['workspace_id','kind','category','word']],
   ['mn_budgets',['workspace_id','month','category','limit_amount']],
+  ['mn_workspace_allocation',['workspace_id','uid','enabled','updated_at']],
   ['mn_transactions',['id','uid','workspace_id','update_id','kind','category','amount','note','day','created']]
  ];
  const statements=[];
