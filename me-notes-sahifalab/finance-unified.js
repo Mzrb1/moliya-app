@@ -8,6 +8,7 @@ const cacheUid=String(tg?.initDataUnsafe?.user?.id||'');
 const CACHE_KEY='me_notes_unified_cache_'+cacheUid,QUEUE_KEY='me_notes_unified_queue_'+cacheUid;
 const state={uid:cacheUid,workspaces:[],active:null,month:F.today().slice(0,7),seenToday:F.today().slice(0,7),views:'home',base:{},queue:[],months:[],archived:[],online:false,connecting:false,storageOK:true,busy:false,accountStatus:null,deleted:false};
 let legacyBackup=null;
+let simpleKind='income';
 let editingId=null;
 let reconnectTimer=null,reconnectDelay=2500;
 function stopReconnect(){
@@ -90,7 +91,7 @@ function compute(){
 function noteStatus(text){
  $('sync-status').textContent=text||((state.connecting?'⏳ Serverga ulanmoqda…':state.online?'🟢 Telegram bilan ulangan':'🟠 Offline / ulanmagan')+
   (state.queue.length?' · '+state.queue.length+' ta amal navbatda':''));
- $('sync-status').className='status'+(!state.online?' warn':'');
+ $('sync-status').className='status'+(!state.online?' warn':'')+(state.online&&!state.connecting&&!state.queue.length&&current()?' hidden':'');
  $('queue-info').textContent=state.queue.length?
   state.queue.length+' ta yozuv yuborilishini kutmoqda.':
   'Barcha yozuvlar yuborilgan.';
@@ -601,8 +602,14 @@ function render(){
  $('expense').textContent=knownLedger?money(data.summary.expense):'—';
  const thisMonth=F.today().slice(0,7);
  const quickIsCurrent=state.month===thisMonth;
- $('quick-save').disabled=!quickIsCurrent;
- $('quick-text').disabled=!quickIsCurrent;
+ $('quick-save').disabled=!quickIsCurrent||!!data.closedAt;
+ $('quick-text').disabled=!quickIsCurrent||!!data.closedAt;
+ $('simple-save').disabled=!quickIsCurrent||!!data.closedAt;
+ $('simple-amount').disabled=!quickIsCurrent||!!data.closedAt;
+ $('simple-note').disabled=!quickIsCurrent||!!data.closedAt;
+ $('first-entry-hint').classList.toggle('hidden',!knownLedger||data.items.length!==0);
+ $('simple-month-hint').textContent=data.closedAt?'🗃 Bu oy arxivlangan. Yangi yozuv uchun avval qayta oching.':(quickIsCurrent?'':'Yangi yozuv uchun joriy oyni tanlang.');
+ $('simple-month-hint').classList.toggle('hidden',quickIsCurrent&&!data.closedAt);
  $('quick-month-hint').textContent=quickIsCurrent?'':'Boshqa oy tanlangan. Tezkor yozish uchun joriy oyni tanlang.';
  $('quick-month-hint').classList.toggle('hidden',quickIsCurrent&&!data.closedAt);
  $('manual-form').querySelector('button[type=submit]').disabled=!!data.closedAt;
@@ -639,6 +646,46 @@ function showPreview(){
   const parts=parseInput(raw);
   target.textContent=parts.map(x=>x.category+' '+money(x.amount)).join(' · ');
  }catch(e){target.textContent='Tekshiring: '+e.message;}
+}
+// Soddalashtirilgan forma eski chat/parser imkoniyatlarini o‘zgartirmaydi.
+function setSimpleKind(kind){
+ if(kind!=='income'&&kind!=='expense')return;
+ const previous=simpleKind;
+ simpleKind=kind;
+ for(const name of ['income','expense'])$('simple-'+name).setAttribute('aria-pressed',name===kind?'true':'false');
+ $('simple-amount').placeholder=kind==='income'?'Masalan: 4000000':'Masalan: 25000';
+ $('simple-note').placeholder=kind==='income'?'Masalan: Oylik':'Masalan: Taksi';
+ const note=$('simple-note');
+ if(previous!==kind&&(note.value.trim()==='Oylik'||!note.value.trim()))note.value=kind==='income'?'Oylik':'';
+ previewSimple();
+}
+function previewSimple(){
+ const w=current(),note=$('simple-note').value.trim(),value=Number($('simple-amount').value);
+ const target=$('simple-preview');
+ if(!w||!note||!Number.isSafeInteger(value)||value<1||value>1000000000000){target.textContent='';return;}
+ try{
+  const prefs=compute()?.prefs||{categories:F.BASE[w.kind],keywords:{income:{},expense:{}}};
+  const category=F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},simpleKind,note);
+  target.textContent='Kategoriya: '+category+' · '+money(value);
+ }catch(e){target.textContent='';}
+}
+function saveSimpleEntry(e){
+ e.preventDefault();
+ try{
+  const w=current(),data=compute();
+  if(!w||!data)throw Error('Avval hisobni oching');
+  if(state.month!==F.today().slice(0,7))throw Error('Joriy oyni tanlang');
+  if(data.closedAt)throw Error('Bu oy arxivlangan. Avval qayta oching');
+  const kind=simpleKind,amount=F.amount(Number($('simple-amount').value)),note=$('simple-note').value.trim();
+  if(!note||note.length>160)throw Error('Izoh kiriting');
+  const category=F.categoryFor({kind:w.kind,categories:data.prefs.categories,keywords:data.prefs.keywords},kind,note);
+  enqueue({action:'add',entry:{kind,amount,date:F.today(),category,note}});
+  $('simple-amount').value='';
+  $('simple-note').value=kind==='income'?'':'';
+  if(kind==='income')setSimpleKind('expense');
+  previewSimple();
+  alertMessage((kind==='income'?'Kirim':'Xarajat')+' saqlandi: '+money(amount)+'. Serverga sinxronlanadi.',true);
+ }catch(err){alertMessage(err.message||'Yozuv saqlanmadi');}
 }
 async function exportData(){
  if(!current())return;
@@ -718,6 +765,11 @@ function setup(){
    alertMessage('Hisob almashtirildi.',true);
   }catch(e){state.active=old;render();alertMessage('Hisobni almashtirib bo‘lmadi: '+e.message);}
  };
+ $('simple-income').onclick=()=>setSimpleKind('income');
+ $('simple-expense').onclick=()=>setSimpleKind('expense');
+ $('simple-amount').addEventListener('input',previewSimple);
+ $('simple-note').addEventListener('input',previewSimple);
+ $('simple-form').onsubmit=saveSimpleEntry;
  $('quick-text').addEventListener('input',showPreview);
  $('quick-form').onsubmit=e=>{
   e.preventDefault();
