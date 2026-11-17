@@ -7,6 +7,7 @@ const {randomUUID,timingSafeEqual}=require('node:crypto');
 const {createClient}=require('@libsql/client');
 const F=require('../me-notes-sahifalab/finance-core.js');
 const {listLineUpdateId,listRangeForId}=require('./list-utils.cjs');
+const undo=require('./entry-undo.cjs');
 const {makeFinanceApi}=require('./miniapp-api.cjs');
 const early=require('./early-access.cjs');
 const administrator=require('./admin-access.cjs');
@@ -207,8 +208,8 @@ async function saveTelegramList(update,uid,w,chat_id,raw){
  if(result.some(x=>x.kind==='income'&&x.category==='Maosh')&&w.kind==='personal'){
   answer+='\n\n🧮 Oylik reja yangilandi. /taqsimot';
  }
- answer+='\n↩️ Butun ro‘yxatni bekor qilish: /bekor';
- await send(chat_id,answer.slice(0,3900));
+ answer+='\n↩️ Shu ro‘yxatni bekor qilish uchun pastdagi tugmani bosing.';
+ await send(chat_id,answer.slice(0,3900),{reply_markup:undo.listButton(update.update_id)});
  return true;
 }
 
@@ -244,23 +245,26 @@ async function handleMessage(update){
   return;
  }
  if(command==='/bekor'){
-  const q=await db.execute({sql:'SELECT id,update_id,category,amount,day FROM mn_transactions WHERE uid=? AND workspace_id=? ORDER BY rowid DESC LIMIT 1',args:[uid,w.id]});
-  if(!q.rows.length){await send(chat_id,'Bekor qilinadigan yozuv yo‘q.');return;}
-  const t=q.rows[0],tag=Number(t.update_id);
-  if(await financeApi.closed(uid,w.id,String(t.day).slice(0,7))){
-   await send(chat_id,'🗃 Bu oy arxivlangan. Avval Mini App → Sozlamalar → Oylik arxivdan oyni qayta oching.');return;
+  // Backwards compatibility for old /bekor links: last entry of active account.
+  // New inline buttons are bound to the exact Telegram confirmation message.
+  const last=await db.execute({sql:'SELECT id,update_id FROM mn_transactions WHERE uid=? AND workspace_id=? ORDER BY rowid DESC LIMIT 1',args:[uid,w.id]});
+  if(!last.rows.length){await send(chat_id,'Bekor qilinadigan yozuv yo‘q.');return;}
+  const item=last.rows[0],tag=Number(item.update_id);
+  const result=tag<0?
+   await undo.list(db,uid,listRangeForId(tag).source):
+   await undo.one(db,uid,String(item.id));
+  if(result.status==='deleted'){
+   await send(chat_id,result.list?
+    '↩️ Oxirgi ro‘yxatdagi '+result.count+' ta yozuv bekor qilindi. Jami '+F.money(result.total)+' qaytarildi (hisobiy).':
+    '↩️ Bekor qilindi: '+result.category+' '+F.money(result.amount));
+  }else if(result.status==='closed'){
+   await send(chat_id,'🗃 Bu oy arxivlangan. Avval Mini App → Sozlamalar → Oylik arxivdan oyni qayta oching.');
+  }else if(result.status==='archived'){
+   await send(chat_id,'🗃 Ushbu hisob yopilgan. Bekor qilishdan oldin hisobni qayta oching.');
+  }else{
+   await send(chat_id,'Yozuv allaqachon bekor qilingan yoki hozircha o‘zgartirib bo‘lmaydi.');
   }
-  if(tag<0){
-   const {lower,upper}=listRangeForId(tag);
-   const rows=await db.execute({sql:'SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS total FROM mn_transactions WHERE uid=? AND workspace_id=? AND update_id BETWEEN ? AND ?',
-    args:[uid,w.id,lower,upper]});
-   await db.execute({sql:'DELETE FROM mn_transactions WHERE uid=? AND workspace_id=? AND update_id BETWEEN ? AND ?',
-    args:[uid,w.id,lower,upper]});
-   await send(chat_id,'↩️ Oxirgi ro‘yxatdagi '+Number(rows.rows[0].n)+' ta yozuv bekor qilindi. Jami '+F.money(Number(rows.rows[0].total))+' qaytarildi (hisobiy).');
-   return;
-  }
-  await db.execute({sql:'DELETE FROM mn_transactions WHERE id=? AND workspace_id=? AND uid=?',args:[t.id,w.id,uid]});
-  await send(chat_id,'↩️ Bekor qilindi: '+t.category+' '+F.money(t.amount));return;
+  return;
  }
  if(command==='/limit'){
   const m2=text.match(/^\/limit(?:@\w+)?\s+(.+?)\s+(\d[\d .,]*(?:\s*(?:ming|mln|k))?)$/i);
@@ -280,9 +284,11 @@ async function handleMessage(update){
  const cat=F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},parsed.kind,parsed.note);
  const beforeQuery=await db.execute({sql:"SELECT COALESCE(SUM(amount),0) AS total FROM mn_transactions WHERE workspace_id=? AND kind='expense' AND category=? AND day>=? AND day<?",args:[w.id,cat,thisMonth()+'-01',nextMonth(thisMonth())+'-01']});
  const before=Number(beforeQuery.rows[0].total);
- const saved=await db.execute({sql:'INSERT OR IGNORE INTO mn_transactions(id,uid,workspace_id,update_id,kind,category,amount,note,day,created) VALUES(?,?,?,?,?,?,?,?,?,?)',
-  args:[randomUUID(),uid,w.id,update.update_id,parsed.kind,cat,parsed.amount,parsed.note,today(),new Date().toISOString()]});
- if(!saved.rowsAffected)return; // idempotence: duplicate Telegram update does not duplicate money
+ const savedId=await undo.saveSingle(db,{
+  uid,workspaceId:w.id,updateId:update.update_id,kind:parsed.kind,category:cat,
+  amount:parsed.amount,note:parsed.note,day:today()
+ });
+ if(!savedId)return; // durable duplicate webhook marker survives cancellation
  let warning='';
  if(parsed.kind==='expense'){
   const q=await db.execute({sql:'SELECT limit_amount FROM mn_budgets WHERE workspace_id=? AND month=? AND category=?',args:[w.id,thisMonth(),cat]});
@@ -293,7 +299,7 @@ async function handleMessage(update){
   else if(limit>0&&before<.8*limit&&after>=.8*limit)warning='\n⚠️ Limitning 80% iga yetdingiz.';
  }
  const salaryInfo=(parsed.kind==='income'&&cat==='Maosh'&&w.kind==='personal')?'\n\n'+salaryText(await monthlySalaryPlan(uid,w)):'';
- await send(chat_id,(parsed.kind==='income'?'✅ Daromad':'✅ Xarajat')+' saqlandi\n📁 '+w.name+'\n🏷 '+cat+'\n💰 '+F.money(parsed.amount)+'\n📝 '+parsed.note+warning+salaryInfo+'\nXato bo‘lsa: /bekor');
+ await send(chat_id,(parsed.kind==='income'?'✅ Daromad':'✅ Xarajat')+' saqlandi\n📁 '+w.name+'\n🏷 '+cat+'\n💰 '+F.money(parsed.amount)+'\n📝 '+parsed.note+warning+salaryInfo+'\n↩️ Xato bo‘lsa, pastdagi tugmani bosing.',{reply_markup:undo.singleButton(savedId)});
 }
 async function handleCallback(update){
  const cb=update.callback_query;
@@ -302,6 +308,26 @@ async function handleCallback(update){
  await administrator.capture(db,cb.from);
  if(await communityBot.handleCallback(uid,cmd,cb.id))return;
  if(await adminBot.handleCallback(uid,cmd,cb.id))return;
+ const cancelled=await undo.fromCallback(db,uid,cmd);
+ if(cancelled){
+  const successful=cancelled.status==='deleted';
+  const response=successful?'Yozuv bekor qilindi.':
+   cancelled.status==='closed'?'Bu oy arxivlangan. Avval oyni qayta oching.':
+   cancelled.status==='archived'?'Hisob yopilgan. Avval hisobni qayta oching.':
+   cancelled.status==='gone'?'Bu yozuv allaqachon o‘chirilgan.':
+   cancelled.status==='invalid'?'Eski yoki noto‘g‘ri tugma.':'Yozuv o‘zgarmadi. Hisob holatini tekshiring.';
+  try{await api('answerCallbackQuery',{callback_query_id:cb.id,text:response,show_alert:!successful});}
+  catch(e){console.error('Undo callback answer failed:',String(e.message).slice(0,100));}
+  if(successful){
+   try{await api('editMessageReplyMarkup',{chat_id:cb.message.chat.id,message_id:cb.message.message_id,reply_markup:{inline_keyboard:[]}});}
+   catch(e){console.error('Undo button cleanup failed:',String(e.message).slice(0,100));}
+   const summary=cancelled.list?
+    '↩️ Shu xabardagi '+cancelled.count+' ta yozuv bekor qilindi. Jami '+F.money(cancelled.total)+' (hisobiy).':
+    '↩️ Shu '+(cancelled.kind==='income'?'daromad':'xarajat')+' bekor qilindi: '+cancelled.category+' '+F.money(cancelled.amount);
+   await send(cb.message.chat.id,summary);
+  }
+  return;
+ }
  await api('answerCallbackQuery',{callback_query_id:cb.id});
  if(cmd==='help:chat'){await send(cb.message.chat.id,help);return;}
  if(cmd==='help:accounts'){
