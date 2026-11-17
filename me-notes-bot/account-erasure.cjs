@@ -32,8 +32,9 @@ async function erase(db,uid,body){
   {sql:'DELETE FROM mn_users WHERE uid=?',args:[uid]}
  ];
  // New community tables are optional in fixtures and older databases.
- const tables=await db.execute({sql:"SELECT name FROM sqlite_master WHERE type='table' AND name IN ('mn_notice_prefs','mn_notice_drafts','mn_notice_outbox')"});
+ const tables=await db.execute({sql:"SELECT name FROM sqlite_master WHERE type='table' AND name IN ('mn_notice_prefs','mn_notice_drafts','mn_notice_outbox','mn_workspace_allocation')"});
  const available=new Set(tables.rows.map(x=>String(x.name)));
+ if(available.has('mn_workspace_allocation'))steps.unshift({sql:'DELETE FROM mn_workspace_allocation WHERE uid=?',args:[uid]});
  if(available.has('mn_notice_outbox')){
   steps.unshift({sql:'DELETE FROM mn_notice_outbox WHERE target=?',args:['u:'+uid]});
   if(available.has('mn_notice_drafts'))steps.unshift({sql:'DELETE FROM mn_notice_outbox WHERE notice_id IN (SELECT id FROM mn_notice_drafts WHERE admin_uid=?)',args:[uid]});
