@@ -156,3 +156,21 @@ test('Encrypted backup cannot resurrect deliberately erased user data',async()=>
  assert.equal((await backup.list(db,'111')).length,0);
  db.close();
 });
+
+test('Encrypted daily backup retains workspace allocation state and restores missing row only',async()=>{
+ const {db,api}=await fixture();
+ await api.execute('111',{op_id:'ws_alloc_lifecycle_enable',workspace_id:'ws-111',action:'allocation_toggle',enabled:false});
+ const date=new Date('2026-11-17T03:00:00Z');
+ await backup.create(db,'111',{key:KEY,now:date});
+ const saved=await backup.exportBackup(db,'111','2026-11-17',{key:KEY});
+ assert.equal(saved.tables.mn_workspace_allocation.length,1);
+ assert.equal(Number(saved.tables.mn_workspace_allocation[0].enabled),0);
+ await db.execute({sql:'DELETE FROM mn_workspace_allocation WHERE uid=?',args:['111']});
+ assert.equal((await api.ledger('111','ws-111','2026-11')).allocation_enabled,true);
+ assert.equal((await restoreMissing(db,'111','2026-11-17',{confirm:'TIKLA'},{key:KEY})).restored,1);
+ assert.equal((await api.ledger('111','ws-111','2026-11')).allocation_enabled,false);
+ await api.execute('111',{op_id:'ws_alloc_lifecycle_enable2',workspace_id:'ws-111',action:'allocation_toggle',enabled:true});
+ assert.equal((await restoreMissing(db,'111','2026-11-17',{confirm:'TIKLA'},{key:KEY})).restored,0);
+ assert.equal((await api.ledger('111','ws-111','2026-11')).allocation_enabled,true);
+ db.close();
+});
