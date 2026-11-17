@@ -320,12 +320,27 @@ function renderPlan(data){
  const p=data.plan;
  const incomeRows=data.items.filter(x=>x.kind==='income');
  const unmatched=incomeRows.filter(x=>x.category!=='Maosh');
+ const maybeSalary=data.w.kind==='personal'?data.items.filter(x=>isSalaryNote(x.note)&&x.category!=='Maosh'):[];
+ const editableSalary=maybeSalary.length===1&&maybeSalary[0].id&&!String(maybeSalary[0].id).startsWith('pending:')&&!data.closedAt?maybeSalary[0]:null;
  $('allocation-intro').textContent=p?'Rejadagi mablag‘lar (xarajat emas).':
   data.w.kind!=='personal'?'Avtomatik taqsimot faqat «Shaxsiy moliyam» hisobidagi maosh uchun ishlaydi.':
+  maybeSalary.some(x=>x.kind==='expense')?'Ehtimol, oyligingiz xarajat deb yozilgan. Yozuvni tekshirib, «Maosh» kirimiga to‘g‘rilang.':
   unmatched.length?'Kirim saqlangan, lekin «Maosh» kategoriyasida emas. «Yozuvlar» bo‘limida ushbu kirimni «Maosh» kategoriyasiga tahrirlang.':
   'Oylik kiritish uchun Asosiy sahifada «+4 mln oylik» deb yozing.';
  if(!p){
-  if(data.w.kind==='personal'&&unmatched.length){
+  if(editableSalary){
+   const fix=el('button','btn alt','💰 Oylik deb to‘g‘rilash');
+   fix.type='button';
+   fix.onclick=()=>{
+    if(!confirm('«'+editableSalary.note+'» '+money(editableSalary.amount)+' yozuvini «Maosh» kirimiga o‘zgartirasizmi? Eski yozuv tahrirlanadi, yangi pul qo‘shilmaydi.'))return;
+    try{
+     enqueue({action:'edit',transaction_id:editableSalary.id,
+      entry:{kind:'income',category:'Maosh',amount:editableSalary.amount,note:editableSalary.note,date:editableSalary.date}});
+     alertMessage('Yozuv «Maosh» kirimiga tahrirlandi. Byudjet taqsimoti yangilanadi.',true);
+    }catch(e){alertMessage(e.message);}
+   };
+   container.append(fix);
+  }else if(data.w.kind==='personal'&&(unmatched.length||maybeSalary.length)){
    const fix=el('button','btn alt','🧾 Kirimni tekshirish');fix.type='button';fix.onclick=()=>chooseView('records');container.append(fix);
   }else if(data.w.kind==='personal'){
    const start=el('button','btn alt','⚡ Oylik kiritish');start.type='button';
@@ -639,7 +654,7 @@ function isSalaryNote(note){
  return /^(?:oylik|oyligim|maosh|maoshim|ish haqi|ish xaqi|ish haqim|avans|ishdagi oylik)$/.test(F.normalizeKeyword(note));
 }
 function normaliseQuickKind(parsed,workspaceKind,rawLine){
- if(workspaceKind!=='personal'||parsed.kind!=='expense'||!isSalaryNote(parsed.note))return parsed;
+ if(workspaceKind!=='personal'||parsed.kind!=='expense'||!/^(?:oylik|oyligim|maosh|maoshim)$/.test(F.normalizeKeyword(parsed.note)))return parsed;
  if(/[-+]/.test(String(rawLine)))return parsed; // aniq manfiy xarajat o‘zgarib ketmasin
  return {...parsed,kind:'income'};
 }
