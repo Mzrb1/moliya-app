@@ -54,7 +54,7 @@ jobs:
       - name: Month archive, restore and diary-isolation tests
         run: node --test tests/me-notes-diary-month-archive.test.cjs
       - name: Daily-use UI and retained-feature regression
-        run: node --test tests/me-notes-daily-ui.test.cjs tests/me-notes-first-entry-ui.test.cjs
+        run: node --test tests/me-notes-daily-ui.test.cjs tests/me-notes-first-entry-ui.test.cjs tests/me-notes-salary-quick-budget.test.cjs
       - name: Test month cleanup and independent Mini App routes
         run: node --test tests/me-notes-month-cleanup-ui.test.cjs
       - name: Finance-only ME Notes entry and preserved Sahifalab archive
