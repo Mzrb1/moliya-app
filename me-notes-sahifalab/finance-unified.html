@@ -15,6 +15,24 @@ input,select,textarea{border:1px solid #d8e0e9;border-radius:11px;background:whi
 .account-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:7px;padding:10px 0;border-bottom:1px solid var(--stroke)}.account-row .account-detail{flex:1;min-width:150px}.account-row .account-actions{display:flex;flex-wrap:wrap;gap:5px}.account-row .btn{min-height:33px;padding:6px 9px;font-size:12px}.account-row .tiny{font-size:11px}
 details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inline{display:flex;align-items:center;gap:8px;line-height:1.35}.check-inline input{width:18px;height:18px;min-height:18px;flex:none}details.card:not([open]){padding-top:15px;padding-bottom:15px}
 @media(max-width:380px){main{padding:12px 10px 98px}.card{padding:13px}.value{font-size:23px}.metric .number{font-size:15px}}
+
+/* Ixcham bosh sahifa: eng muhim amal birinchi ekranning o‘zida. */
+.account-card{padding:12px 13px}.account-card label{margin:2px 0 4px}
+.account-card .field-grid{gap:8px}.account-card select,.account-card input[type="month"]{min-height:40px;padding:9px}
+.account-tools{border-top:1px solid var(--stroke);margin-top:10px;padding-top:7px}
+.account-tools>summary{font-size:12px;color:#44617e;cursor:pointer;font-weight:700;list-style:none}
+.account-tools>summary::after{content:" ▾"}.account-tools[open]>summary::after{content:" ▴"}
+.balance-card{padding:14px 15px}.balance-card .metrics{gap:8px;margin-top:10px}.balance-card .metric{padding:9px 10px}.balance-card .metric .number{font-size:16px}
+.entry-card{padding:14px 15px}.entry-card h2{margin-bottom:9px}
+.entry-switch{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 11px}
+.entry-mode{min-height:43px;border:1px solid #dce5f2;border-radius:11px;background:#f3f6fb;color:#426079;font-weight:800}
+.entry-mode[aria-pressed="true"]{background:#e5efff;border-color:#317dea;color:#145abd}
+.entry-card label{margin-top:8px}.entry-card input{min-height:44px}.entry-card .btn{width:100%}
+.entry-help{margin:0 0 9px;background:#edf5ff;border-radius:10px;padding:9px 11px;color:#345a87;font-size:12px;line-height:1.5}
+.record-tools{margin-top:12px}.record-tools>summary{cursor:pointer;color:#3b5877;font-size:14px;font-weight:750}
+.record-tools>.card{padding:13px 0 0;box-shadow:none;border:0;margin:0}
+.recent-card{padding:13px 15px}.recent-card h2{font-size:15px;margin:0}.recent-card .btn{padding:8px 11px;min-height:35px;font-size:12px}
+@media(max-width:380px){.balance-card,.entry-card,.recent-card{padding:12px}.balance-card .metric .number{font-size:14px}}
 </style></head><body><main>
 <header class="top"><div class="logo">ME</div><div class="grow"><h1 class="title">ME Notes</h1><div class="sub">Moliya boshqaruvi</div></div><button class="header-action" type="button" id="open-settings" aria-label="Sozlamalar">⚙️</button></header>
 <div id="notices" role="status" aria-live="polite"></div><div id="sync-status" class="status">Ulanish tekshirilmoqda…</div>
@@ -26,18 +44,36 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inl
  <p class="tiny gap-top">Yozuvlaringiz saqlangan. Ilova xotirasini tozalamang.</p>
  </section>
 <div id="app" class="hidden">
-<section class="card"><div class="field-grid"><div><label for="workspace">Hisob</label><select id="workspace"></select></div><div><label for="month">Oy</label><input id="month" type="month"/></div></div><div class="flex gap-top"><button type="button" id="new-account" class="btn alt">+ Hisob ochish</button><button type="button" id="manage-accounts" class="btn alt" aria-expanded="false" aria-controls="account-manager">⚙️ Boshqarish</button><span class="pill" id="account-kind"></span></div><form id="account-form" class="hidden gap-top"><div class="field-grid"><div><label for="account-type">Hisob turi</label><select id="account-type"><option value="personal">Shaxsiy</option><option value="family">Oilaviy</option><option value="business">Biznes</option></select></div><div><label for="account-name">Hisob nomi</label><input id="account-name" maxlength="60" placeholder="Masalan: Oilamiz"/></div></div><button type="submit" id="create-account-submit" class="btn gap-top">Hisobni ochish</button></form>
+<section class="card account-card"><div class="field-grid"><div><label for="workspace">Hisob</label><select id="workspace"></select></div><div><label for="month">Oy</label><input id="month" type="month"/></div></div><details class="account-tools" id="account-tools"><summary>⚙️ Hisoblarni boshqarish</summary><div class="flex gap-top"><button type="button" id="new-account" class="btn alt">+ Hisob ochish</button><button type="button" id="manage-accounts" class="btn alt" aria-expanded="false" aria-controls="account-manager">⚙️ Boshqarish</button><span class="pill" id="account-kind"></span></div><form id="account-form" class="hidden gap-top"><div class="field-grid"><div><label for="account-type">Hisob turi</label><select id="account-type"><option value="personal">Shaxsiy</option><option value="family">Oilaviy</option><option value="business">Biznes</option></select></div><div><label for="account-name">Hisob nomi</label><input id="account-name" maxlength="60" placeholder="Masalan: Oilamiz"/></div></div><button type="submit" id="create-account-submit" class="btn gap-top">Hisobni ochish</button></form>
 <div id="account-manager" class="hidden gap-top">
 <p class="tiny">Hisobni tanlang, nomini o‘zgartiring yoki yoping. Yopilgan hisobning barcha yozuvlari va limitlari saqlanadi, keyin tiklash mumkin.</p>
 <div id="active-accounts" aria-live="polite"></div>
 <h3 class="gap-top">Yopilgan hisoblar</h3>
 <div id="archived-accounts" aria-live="polite"></div>
-</div></section>
+</div></details></section>
 <section id="view-home">
-<div class="card">
- <span class="tiny">Bu bankdagi haqiqiy qoldiq emas</span><div class="value" id="net">—</div>
- <div class="metrics gap-top"><div class="metric"><span class="tiny">Kirim</span><span class="number green" id="income">—</span></div><div class="metric"><span class="tiny">Chiqim</span><span class="number red" id="expense">—</span></div></div>
+<div class="card balance-card">
+ <span class="tiny">Hisoblangan qoldiq · Bu bankdagi haqiqiy qoldiq emas</span><div class="value" id="net">—</div>
+ <div class="metrics"><div class="metric"><span class="tiny">Kirim</span><span class="number green" id="income">—</span></div><div class="metric"><span class="tiny">Chiqim</span><span class="number red" id="expense">—</span></div></div>
 </div>
+<div class="card entry-card"><h2>✍️ Pul kiritish</h2>
+ <p id="first-entry-hint" class="entry-help hidden">👋 Ishni boshlash uchun oyligingizni yozing. Keyin «Xarajat» orqali sarflaringizni sinab ko‘ring.</p>
+ <form id="simple-form">
+  <div class="entry-switch" role="group" aria-label="Yozuv turi">
+   <button type="button" id="simple-income" class="entry-mode" aria-pressed="true">＋ Kirim</button>
+   <button type="button" id="simple-expense" class="entry-mode" aria-pressed="false">− Xarajat</button>
+  </div>
+  <label for="simple-amount">Summa (so‘m)</label><input id="simple-amount" type="number" inputmode="numeric" min="1" max="1000000000000" step="1" placeholder="Masalan: 4000000" required/>
+  <label for="simple-note">Izoh</label><input id="simple-note" maxlength="160" type="text" placeholder="Masalan: Oylik" value="Oylik" required/>
+  <div id="simple-preview" class="tiny gap-top" aria-live="polite"></div>
+  <p id="simple-month-hint" class="tiny gap-top hidden"></p>
+  <button id="simple-save" class="btn gap-top" type="submit">Saqlash</button>
+ </form>
+</div>
+<div class="card recent-card"><div class="headline"><h2>So‘nggi yozuvlar</h2><button type="button" data-view="records" class="btn alt">Hammasi</button></div><div id="recent"></div></div>
+</section>
+<section id="view-records" class="hidden">
+<details class="card record-tools"><summary>⚡ Ko‘p yozuv yoki batafsil kiritish</summary>
 <div class="card"><h2>⚡ Tezkor yozuv</h2>
 <form id="quick-form"><textarea id="quick-text" maxlength="3000" placeholder="25 ming taksi&#10;Tushlik 35000&#10;+3 mln oylik" required></textarea>
 <p id="quick-month-hint" class="tiny gap-top hidden"></p>
@@ -51,9 +87,7 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inl
 <label for="manual-note">Izoh</label><input id="manual-note" type="text" maxlength="160" placeholder="Masalan: bozor" required/>
 <button type="submit" class="btn gap-top">Yozuvni saqlash</button>
 </form></div>
-<div class="card"><div class="headline"><h2>So‘nggi yozuvlar</h2><button type="button" data-view="records" class="btn alt">Hammasi</button></div><div id="recent"></div></div>
-</section>
-<section id="view-records" class="hidden">
+</details>
 <div id="edit-card" class="card hidden">
 <h2>✏️ Yozuvni tahrirlash</h2>
 <form id="edit-form">
