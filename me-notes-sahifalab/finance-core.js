@@ -10,7 +10,7 @@ const KINDS={personal:"Shaxsiy moliyam",family:"Oilaviy byudjet",business:"Bizne
 const BASE={
  personal:{expense:["Oziq-ovqat","Transport","Bolalar","Uy-ro'zg'or","Kommunal","Sog'liq","Kiyim","Ta'lim","Dam olish","Qarz va majburiyatlar","Boshqa"],income:["Maosh","Qo'shimcha ish","Sovg'a","Boshqa"]},
  family:{expense:["Bozor","Kommunal","Bolalar","Uy-ro'zg'or","Transport","Sog'liq","Ta'lim","Boshqa"],income:["Maosh","Oilaviy kirim","Boshqa"]},
- business:{expense:["Tovar","Ijara","Ish haqi","Transport","Kommunal","Reklama","Boshqa"],income:["Savdo tushumi","Xizmat daromadi","Boshqa"]}
+ business:{expense:["Tovar","Ijara","Ish haqi","Transport","Kommunal","Reklama","Boshqa"],income:["Savdo tushumi","Xizmat daromadi","Boshqa","Maosh"]}
 };
 const today=()=>new Intl.DateTimeFormat('sv-SE',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Tashkent'}).format(new Date());
 const id=()=>Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,12);
@@ -96,7 +96,7 @@ function removeKeyword(w,kind,category,word){
 function create(s,kind,name){
  if(!KINDS[kind])throw Error('Hisob turi noto‘g‘ri');
  if(s.workspaces.length>=MAX_WORKSPACES)throw Error('Ko‘pi bilan 12 ta hisob ochish mumkin');
- const w={id:id(),kind,name:cleanText(name,60)||KINDS[kind],categories:JSON.parse(JSON.stringify(BASE[kind])),keywords:{income:{},expense:{}},transactions:[],budgets:{}};
+ const w={id:id(),kind,name:cleanText(name,60)||KINDS[kind],allocation_enabled:kind==='personal',categories:JSON.parse(JSON.stringify(BASE[kind])),keywords:{income:{},expense:{}},transactions:[],budgets:{}};
  s.workspaces.push(w);s.active=w.id;return w;
 }
 function current(s){return s.workspaces.find(w=>w.id===s.active)||null;}
@@ -186,11 +186,16 @@ function splitSalary(value){
  const biznes=remainder-rozgor;
  return {salary,ehson,kelajak,oyin,rozgor,biznes};
 }
-// Faqat SHAXSIY hisobdagi Maosh kategoriya daromadlarini rejalashtiramiz.
-// Boshqa turdagi hisoblarga pul avtomatik ko‘chmaydi.
+// Har hisobning o‘z yoqish/o‘chirish parametri. Eski hisoblar uchun
+// shaxsiy=yoqilgan, oilaviy/biznes=o‘chiq; hech qanday real pul ko‘chirilmaydi.
+function allocationEnabled(w){
+ return w.allocation_enabled===undefined ? w.kind==='personal' : w.allocation_enabled===true;
+}
 function salaryAllocation(w,month){
  if(!validMonth(month))throw Error('Oy noto‘g‘ri');
- if(w.kind!=='personal')return null;
+ if(!allocationEnabled(w))return null;
+ // Hech qachon umumiy kirim yoki savdo tushumini taqsimlamaymiz: faqat Maosh.
+ if(!w.categories?.income?.includes('Maosh'))return null;
  const salaries=w.transactions.filter(t=>t.kind==='income'&&t.category==='Maosh'&&t.date.slice(0,7)===month);
  if(!salaries.length)return null;
  const buckets={salary:0,ehson:0,kelajak:0,oyin:0,rozgor:0,biznes:0};
@@ -200,15 +205,18 @@ function salaryAllocation(w,month){
  }
  const hard=w.budgets[month]||{};
  const targets={};
- const group=Object.keys(HOUSEHOLD_WEIGHTS).filter(cat=>w.categories.expense.includes(cat));
+ // Biznesning savdo/operatsion xarajatlari shaxsiy Ro‘zg‘or limitiga aylanmaydi.
+ // Oilaviy «Bozor» esa shaxsiy «Oziq-ovqat» bilan bir xil og‘irlikka ega.
+ const weights=w.kind==='family'?{...HOUSEHOLD_WEIGHTS,Bozor:HOUSEHOLD_WEIGHTS['Oziq-ovqat']}:HOUSEHOLD_WEIGHTS;
+ const group=w.kind==='business'?[]:Object.keys(weights).filter(cat=>w.categories.expense.includes(cat));
  const fixed=group.filter(cat=>Number(hard[cat])>0);
  const fixedSum=fixed.reduce((sum,cat)=>sum+Number(hard[cat]),0);
  const available=Math.max(0,buckets.rozgor-fixedSum);
  const flexible=group.filter(cat=>!fixed.includes(cat));
- const weightTotal=flexible.reduce((sum,cat)=>sum+HOUSEHOLD_WEIGHTS[cat],0);
+ const weightTotal=flexible.reduce((sum,cat)=>sum+weights[cat],0);
  // Largest-remainder usuli: kichik summalarda ham limitlar musbat va jami aniq.
  const shares=flexible.map((cat,i)=>{
-  const exact=weightTotal?available*HOUSEHOLD_WEIGHTS[cat]/weightTotal:0;
+  const exact=weightTotal?available*weights[cat]/weightTotal:0;
   return {cat,i,value:Math.floor(exact),fraction:exact-Math.floor(exact)};
  });
  let pieces=available-shares.reduce((sum,x)=>sum+x.value,0);
@@ -289,7 +297,9 @@ function validate(raw){
  for(const item of raw.workspaces){
   if(!item||typeof item!=='object'||!KINDS[item.kind]||typeof item.id!=='string'||!item.id||ids.has(item.id))throw Error('Hisob ma’lumoti noto‘g‘ri');
   ids.add(item.id);
-  const w={id:item.id,kind:item.kind,name:cleanText(item.name,60)||KINDS[item.kind],categories:{expense:[],income:[]},keywords:{income:{},expense:{}},transactions:[],budgets:{}};
+  const w={id:item.id,kind:item.kind,name:cleanText(item.name,60)||KINDS[item.kind],
+   allocation_enabled:item.allocation_enabled===undefined?item.kind==='personal':item.allocation_enabled===true,
+   categories:{expense:[],income:[]},keywords:{income:{},expense:{}},transactions:[],budgets:{}};
   for(const kind of ['income','expense']){
    const cats=item.categories?.[kind];
    if(!Array.isArray(cats)||!cats.length||cats.length>50)throw Error('Kategoriya ma’lumoti noto‘g‘ri');
@@ -330,5 +340,5 @@ function validate(raw){
  return result;
 }
 function csv(w){const quote=v=>{let s=String(v??'');if(/^[\s]*[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};return '\ufeff'+[['Sana','Hisob','Turi','Kategoriya','Summa','Izoh'],...w.transactions.map(t=>[t.date,w.name,t.kind==='income'?'Daromad':'Xarajat',t.category,t.amount,t.note])].map(r=>r.map(quote).join(';')).join('\r\n');}
-return {KINDS,BASE,SALARY_RATES,HOUSEHOLD_WEIGHTS,SALARY_BUCKETS,splitSalary,salaryAllocation,effectiveCategoryLimit,KEYWORD_RULES,parseList,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,validate,csv,spent};
+return {KINDS,BASE,SALARY_RATES,HOUSEHOLD_WEIGHTS,SALARY_BUCKETS,splitSalary,allocationEnabled,salaryAllocation,effectiveCategoryLimit,KEYWORD_RULES,parseList,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,validate,csv,spent};
 });

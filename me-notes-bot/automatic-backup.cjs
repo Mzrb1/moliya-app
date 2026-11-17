@@ -11,6 +11,7 @@ const TABLES=[
  ['mn_workspace_archive',"SELECT a.workspace_id,a.uid,a.archived_at FROM mn_workspace_archive a WHERE a.uid=?"],
  ['mn_transactions',"SELECT id,uid,workspace_id,update_id,kind,category,amount,note,day,created FROM mn_transactions WHERE uid=?"],
  ['mn_budgets',"SELECT b.workspace_id,b.month,b.category,b.limit_amount FROM mn_budgets b JOIN mn_workspaces w ON w.id=b.workspace_id WHERE w.uid=?"],
+ ['mn_workspace_allocation',"SELECT workspace_id,uid,enabled,updated_at FROM mn_workspace_allocation WHERE uid=?"],
  ['mn_extra_categories',"SELECT x.workspace_id,x.kind,x.name FROM mn_extra_categories x JOIN mn_workspaces w ON w.id=x.workspace_id WHERE w.uid=?"],
  ['mn_keyword_aliases',"SELECT x.workspace_id,x.kind,x.category,x.word FROM mn_keyword_aliases x JOIN mn_workspaces w ON w.id=x.workspace_id WHERE w.uid=?"],
  ['mn_closed_months',"SELECT workspace_id,uid,month,closed_at FROM mn_closed_months WHERE uid=?"],
