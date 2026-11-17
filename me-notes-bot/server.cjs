@@ -104,7 +104,7 @@ async function choose(uid,expanded=false){
 const help='📒 ME Notes — tezkor yozuv\n\n25 ming taksi\ntushlik 35000\n+3 mln oylik\n\n'+
  '📋 Bir nechta xarajatni har qatorda yozing (20 tagacha):\nTushlik 98000\n18 ming yo‘lga\n\n'+
  '📁 /hisob — hisobni almashtirish\n📊 /hisobot yoki /hisobot 2026-10 — kerakli oy\n🧮 /taqsimot yoki /taqsimot 2026-10 — oylik reja\n'+
- '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni bekor qilish\n'+
+ '🎯 /limit Transport 100000 — limit\n↩️ /bekor — oxirgi yozuvni avval ko‘rsatib, tasdiq bilan bekor qilish\n'+
  'ℹ️ /yordam — yordam\n'+
  '👥 /guruh — hamjamiyatga qo‘shilish\n🔔 /obuna — yangilik va reklama xabarnomalari\n'+
  '📱 Mini App — pastdagi Menyu yoki bot profilidagi Ochish tugmasi';
@@ -245,24 +245,18 @@ async function handleMessage(update){
   return;
  }
  if(command==='/bekor'){
-  // Backwards compatibility for old /bekor links: last entry of active account.
-  // New inline buttons are bound to the exact Telegram confirmation message.
-  const last=await db.execute({sql:'SELECT id,update_id FROM mn_transactions WHERE uid=? AND workspace_id=? ORDER BY rowid DESC LIMIT 1',args:[uid,w.id]});
+  // Old /bekor links cannot reveal which confirmation message was tapped.
+  // Do NOT delete the latest entry immediately; ask the user to confirm the
+  // precise last transaction/list with a scoped inline button instead.
+  const last=await db.execute({sql:'SELECT id,update_id,category,kind,amount FROM mn_transactions WHERE uid=? AND workspace_id=? ORDER BY rowid DESC LIMIT 1',args:[uid,w.id]});
   if(!last.rows.length){await send(chat_id,'Bekor qilinadigan yozuv yo‘q.');return;}
   const item=last.rows[0],tag=Number(item.update_id);
-  const result=tag<0?
-   await undo.list(db,uid,listRangeForId(tag).source):
-   await undo.one(db,uid,String(item.id));
-  if(result.status==='deleted'){
-   await send(chat_id,result.list?
-    '↩️ Oxirgi ro‘yxatdagi '+result.count+' ta yozuv bekor qilindi. Jami '+F.money(result.total)+' qaytarildi (hisobiy).':
-    '↩️ Bekor qilindi: '+result.category+' '+F.money(result.amount));
-  }else if(result.status==='closed'){
-   await send(chat_id,'🗃 Bu oy arxivlangan. Avval Mini App → Sozlamalar → Oylik arxivdan oyni qayta oching.');
-  }else if(result.status==='archived'){
-   await send(chat_id,'🗃 Ushbu hisob yopilgan. Bekor qilishdan oldin hisobni qayta oching.');
+  if(tag<0){
+   const {source,lower,upper}=listRangeForId(tag);
+   const data=await db.execute({sql:'SELECT COUNT(*) AS n,COALESCE(SUM(amount),0) AS total FROM mn_transactions WHERE uid=? AND workspace_id=? AND update_id BETWEEN ? AND ?',args:[uid,w.id,lower,upper]});
+   await send(chat_id,'⚠️ Eski /bekor havolasi xabarga bog‘lanmagan.\n\nOxirgi ro‘yxat: '+Number(data.rows[0].n)+' ta yozuv · '+F.money(Number(data.rows[0].total))+'\nFaqat shu ro‘yxatni bekor qilishni tasdiqlaysizmi?',{reply_markup:undo.listButton(source)});
   }else{
-   await send(chat_id,'Yozuv allaqachon bekor qilingan yoki hozircha o‘zgartirib bo‘lmaydi.');
+   await send(chat_id,'⚠️ Eski /bekor havolasi xabarga bog‘lanmagan.\n\nOxirgi yozuv: '+(item.kind==='income'?'Daromad':'Xarajat')+' · '+item.category+' · '+F.money(Number(item.amount))+'\nFaqat shu yozuvni bekor qilishni tasdiqlaysizmi?',{reply_markup:undo.singleButton(String(item.id))});
   }
   return;
  }
