@@ -92,6 +92,8 @@ function noteStatus(text){
  $('sync-status').textContent=text||((state.connecting?'⏳ Serverga ulanmoqda…':state.online?'🟢 Telegram bilan ulangan':'🟠 Offline / ulanmagan')+
   (state.queue.length?' · '+state.queue.length+' ta amal navbatda':''));
  $('sync-status').className='status'+(!state.online?' warn':'')+(state.online&&!state.connecting&&!state.queue.length&&current()?' hidden':'');
+ $('retry-sync').classList.toggle('hidden',!state.queue.length);
+ $('retry-sync').disabled=state.connecting||state.busy;
  $('queue-info').textContent=state.queue.length?
   state.queue.length+' ta yozuv yuborilishini kutmoqda.':
   'Barcha yozuvlar yuborilgan.';
@@ -100,7 +102,7 @@ async function request(path,options={}){
  if(!initData)throw Error('Telegram orqali ilovani oching');
  const headers={'X-Telegram-Init-Data':initData};
  if(options.body!==undefined)headers['Content-Type']='application/json';
- const res=await fetch(API+path,{method:options.method||'GET',headers,body:options.body===undefined?undefined:JSON.stringify(options.body),signal:AbortSignal.timeout((options.method||'GET')==='GET'?20000:14000),cache:'no-store'});
+ const res=await fetch(API+path,{method:options.method||'GET',headers,body:options.body===undefined?undefined:JSON.stringify(options.body),signal:AbortSignal.timeout((options.method||'GET')==='GET'?30000:45000),cache:'no-store'});
  const obj=await res.json().catch(()=>({error:'Serverdan noto‘g‘ri javob'}));
  if(!res.ok||!obj.ok){
   const err=new Error(obj.error||('HTTP '+res.status));err.status=res.status;throw err;
@@ -222,6 +224,11 @@ async function pull(){
  try{
   await fetchWorkspaces();state.online=true;await flush();await fetchLedger();await fetchMonthHistory();
   try{await fetchAccountStatus();}catch(e){$('daily-backup-status').textContent='Zaxira holati vaqtincha olinmadi.';}
+  // A successful read does not mean a pending write reached Turso.
+  // Preserve its op_id and keep retrying after a temporary POST failure.
+  if(state.queue.length&&!state.online){
+   render();noteStatus();return;
+  }
   state.online=true;stopReconnect();render();alertMessage('');
   $('connection-help').classList.add('hidden');
  }catch(e){
@@ -265,9 +272,12 @@ async function flush(){
     state.online=true;
    }catch(e){
     state.online=false;
+    const recoverable=!e.status||e.status>=500||e.status===429;
     alertMessage(e.status===401?'Telegram sessiyasi tugagan, Mini App’ni qayta oching.':(
      e.status&&e.status<500?'Saqlanmagan amalda xato: '+e.message+'. Ma’lumot o‘chirilmagan.':
-     'Ulanish uzildi. Yozuvlar navbatda xavfsiz saqlangan.'));
+     'Ulanish uzildi. Yozuvlar navbatda xavfsiz saqlangan. Avtomatik qayta yuborish rejalashtirildi.'));
+    // Never remove a failed op or mint a new op_id: the server is idempotent.
+    if(recoverable)scheduleReconnect();
     break;
    }
   }
@@ -926,6 +936,7 @@ function setup(){
  };
  $('confirm-import').onclick=importLegacy;
  $('retry-connect').onclick=pull;
+ $('retry-sync').onclick=()=>{if(navigator.onLine)pull();else alertMessage('Internetni ulang: navbatdagi amal xavfsiz saqlanmoqda.');};
  $('archive-export').onclick=exportData;
  $('archive-close').onclick=()=>archiveAction('month_close');
  $('archive-reopen').onclick=()=>archiveAction('month_reopen');
