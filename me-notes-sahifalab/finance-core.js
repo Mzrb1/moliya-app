@@ -205,15 +205,18 @@ function salaryAllocation(w,month){
  }
  const hard=w.budgets[month]||{};
  const targets={};
- const group=Object.keys(HOUSEHOLD_WEIGHTS).filter(cat=>w.categories.expense.includes(cat));
+ // Biznesning savdo/operatsion xarajatlari shaxsiy Ro‘zg‘or limitiga aylanmaydi.
+ // Oilaviy «Bozor» esa shaxsiy «Oziq-ovqat» bilan bir xil og‘irlikka ega.
+ const weights=w.kind==='family'?{...HOUSEHOLD_WEIGHTS,Bozor:HOUSEHOLD_WEIGHTS['Oziq-ovqat']}:HOUSEHOLD_WEIGHTS;
+ const group=w.kind==='business'?[]:Object.keys(weights).filter(cat=>w.categories.expense.includes(cat));
  const fixed=group.filter(cat=>Number(hard[cat])>0);
  const fixedSum=fixed.reduce((sum,cat)=>sum+Number(hard[cat]),0);
  const available=Math.max(0,buckets.rozgor-fixedSum);
  const flexible=group.filter(cat=>!fixed.includes(cat));
- const weightTotal=flexible.reduce((sum,cat)=>sum+HOUSEHOLD_WEIGHTS[cat],0);
+ const weightTotal=flexible.reduce((sum,cat)=>sum+weights[cat],0);
  // Largest-remainder usuli: kichik summalarda ham limitlar musbat va jami aniq.
  const shares=flexible.map((cat,i)=>{
-  const exact=weightTotal?available*HOUSEHOLD_WEIGHTS[cat]/weightTotal:0;
+  const exact=weightTotal?available*weights[cat]/weightTotal:0;
   return {cat,i,value:Math.floor(exact),fraction:exact-Math.floor(exact)};
  });
  let pieces=available-shares.reduce((sum,x)=>sum+x.value,0);
