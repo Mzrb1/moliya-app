@@ -16,9 +16,17 @@ test('First entry on mobile offers explicit income and expense with amount and n
 test('Legacy bulk and manual forms remain available in records, not home',()=>{
  const home=html.slice(html.indexOf('<section id="view-home">'),html.indexOf('<section id="view-records"'));
  const records=html.slice(html.indexOf('<section id="view-records"'),html.indexOf('<section id="view-report"'));
- for(const id of ['quick-form','manual-form','manual-toggle'])assert.ok(records.includes('id="'+id+'"'));
- assert.doesNotMatch(home,/id="quick-form"|id="manual-form"/);
+ for(const id of ['manual-form','manual-toggle'])assert.ok(records.includes('id="'+id+'"'));
+ assert.ok(home.includes('id="quick-form"'));
+ assert.doesNotMatch(home,/id="manual-form"/);
+ assert.doesNotMatch(records,/id="quick-form"/);
  assert.match(records,/record-tools/);
+});
+test('Budget explains absent Maosh and links to existing entries for correction',()=>{
+ assert.match(js,/normaliseQuickKind/);
+ assert.match(js,/isSalaryNote/);
+ assert.match(js,/Kirimni tekshirish/);
+ assert.match(js,/Maosh» kategoriyasida emas/);
 });
 test('No change to finance account controls, history, queue or security',()=>{
  for(const id of ['workspace','month','new-account','manage-accounts','account-manager','recent','records','net','income','expense']){
