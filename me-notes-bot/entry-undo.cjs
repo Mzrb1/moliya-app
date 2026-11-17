@@ -67,7 +67,9 @@ async function list(db,uid,source){
  const marker=await db.execute({sql:'SELECT workspace_id FROM mn_processed_lists WHERE uid=? AND update_id=?',args:[uid,source]});
  if(!marker.rows.length)return {status:'gone'};
  const wid=String(marker.rows[0].workspace_id);
- const {lower,upper}=listRangeForId(listLineUpdateId(source,0));
+ let lower,upper;
+ try{({lower,upper}=listRangeForId(listLineUpdateId(source,0)));}
+ catch(_){return {status:'invalid'};}
  const selected=await db.execute({sql:'SELECT day FROM mn_transactions WHERE uid=? AND workspace_id=? AND update_id BETWEEN ? AND ? LIMIT 21',
   args:[uid,wid,lower,upper]});
  if(!selected.rows.length)return {status:'gone'};
