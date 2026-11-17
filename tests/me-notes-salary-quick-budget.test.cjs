@@ -36,12 +36,14 @@ test('Non-salary expenses and explicit minus stay expenses',()=>{
 test('Mixed quick entries yield the expected Ehson Kelajak Oyin Ro zgor Biznes',()=>{
  const parse=parser();
  const r=parse('+4 mln oylik\n25 ming taksi');
+ // Backend gives each stored transaction its immutable id; the UI parser is pre-save.
+ const saved=r.map((entry,index)=>({...entry,id:'fixture-'+index}));
  const month=F.today().slice(0,7);
- const plan=F.salaryAllocation({kind:'personal',categories:F.BASE.personal,transactions:r,budgets:{[month]:{}}},month);
+ const plan=F.salaryAllocation({kind:'personal',categories:F.BASE.personal,transactions:saved,budgets:{[month]:{}}},month);
  assert.ok(plan);
  assert.deepEqual([plan.salary,plan.ehson,plan.kelajak,plan.oyin,plan.rozgor,plan.biznes],
   [4000000,100000,390000,390000,1404000,1716000]);
- assert.equal(F.summary({kind:'personal',categories:F.BASE.personal,transactions:r,budgets:{[month]:{}}},month).net,3975000);
+ assert.equal(F.summary({kind:'personal',categories:F.BASE.personal,transactions:saved,budgets:{[month]:{}}},month).net,3975000);
 });
 test('Family/business income does not trigger a personal allocation',()=>{
  for(const kind of ['family','business']){
