@@ -8,7 +8,7 @@
 const VERSION=1,MAX=1000000000000,MAX_WORKSPACES=12;
 const KINDS={personal:"Shaxsiy moliyam",family:"Oilaviy byudjet",business:"Biznes moliyam"};
 const BASE={
- personal:{expense:["Oziq-ovqat","Transport","Bolalar","Uy-ro'zg'or","Kommunal","Sog'liq","Kiyim","Ta'lim","Dam olish","Qarz va majburiyatlar","Boshqa"],income:["Maosh","Qo'shimcha ish","Sovg'a","Boshqa"]},
+ personal:{expense:["Oziq-ovqat","Transport","Bolalar","Uy-ro'zg'or","Kommunal","Sog'liq","Kiyim","Ta'lim","Dam olish","Qarz va majburiyatlar","Ehson","Investitsiya","Shaxsiy xarid","Sovg'a","Tug'ilgan kun","Biznes xarajati","Boshqa"],income:["Maosh","Qo'shimcha ish","Sovg'a","Boshqa"]},
  family:{expense:["Bozor","Kommunal","Bolalar","Uy-ro'zg'or","Transport","Sog'liq","Ta'lim","Boshqa"],income:["Maosh","Oilaviy kirim","Boshqa"]},
  business:{expense:["Tovar","Ijara","Ish haqi","Transport","Kommunal","Reklama","Boshqa"],income:["Savdo tushumi","Xizmat daromadi","Boshqa","Maosh"]}
 };
@@ -24,11 +24,17 @@ function fresh(){return {version:VERSION,active:null,workspaces:[]};}
 // Har bir soha uchun kengaytiriladigan lug‘at. Bir xil parser Mini App va chatda ishlatiladi.
 const KEYWORD_RULES={
  expense:[
+  {categories:['Ehson'],words:["ehson","sadaqa","xayriya","zakot"]},
+  {categories:['Investitsiya'],words:["investitsiya","jamg'arma","jamg'armaga"]},
+  {categories:['Biznes xarajati'],words:["hosting","render","turso","reklama","ish quroli","ish uchun","biznes","material"]},
+  {categories:["Tug'ilgan kun"],words:["tug'ilgan kun","tugilgan kun"]},
+  {categories:["Sovg'a"],words:["sovg'a","sovga","hadya"]},
+  {categories:['Shaxsiy xarid'],words:["kola","cola","fanta","shirinlik","shokolad","muzqaymoq"]},
   {categories:['Transport'],words:["taksi","taxi","yo'l","yo'lkira","yolkira","yul","avtobus","marshrutka","metro","benzin","dizel","zapravka","azs","avtoyuvish","parkovka","avtoservis","shina","yandex","indrive","transport","yo'lovchi","yonilg'i","yoqilg'i","chipta"]},
   {categories:['Qarz va majburiyatlar'],words:["qarz","kredit","kredit to'lovi","bank krediti","nasiya","nasiyaga","bo'lib to'lash","foiz to'lovi","qarzni yopish"]},
   {categories:['Bolalar'],words:["farzand","bolalar","bolaga","bog'cha","pampers","taglik","o'yinchoq","chaqaloq","maktab formasi","bolalar kiyimi"]},
   {categories:['Ta\'lim'],words:["o'qish","o'quv","maktab","kurs","kontrakt","kitob","daftar","repetitor","dars","ustoz","universitet","ta'lim","o'qituvchi"]},
-  {categories:['Bozor','Oziq-ovqat'],words:["bozor","oziq ovqat","supermarket","market","magazin","do'kon","dukon","non","tuxum","go'sht","guruch","sabzi","kartoshka","meva","sabzavot","sut","shakar","tushlik","nonushta","kechki ovqat","restoran","kafe","osh","palov","kabob","somsa","burger","ichimlik","ovqat"]},
+  {categories:['Bozor','Oziq-ovqat'],words:["bozor","bozorlik","oziq ovqat","supermarket","market","magazin","do'kon","dukon","non","tuxum","go'sht","guruch","sabzi","kartoshka","meva","sabzavot","sut","shakar","tushlik","nonushta","kechki ovqat","restoran","kafe","osh","palov","kabob","somsa","burger","ichimlik","ovqat"]},
   {categories:['Kommunal'],words:["kommunal","elektr","svet","gaz","suv","internet","wifi","wi fi","telefon","mobil aloqa","tarif","beeline","ucell","uzmobile","mobiuz","chiqindi","axlat","issiq suv"]},
   {categories:['Sog\'liq'],words:["sog'liq","dori","apteka","dorixona","doktor","vrach","shifokor","poliklinika","shifoxona","kasalxona","analiz","tahlil","stomatolog","tish","ukol","davolanish","emlash"]},
   {categories:['Kiyim'],words:["kiyim","ko'ylak","kuylak","shim","futbolka","kurtka","krossovka","tufli","etik","poyabzal","ro'mol","sharf","kostyum","paypoq"]},
@@ -40,7 +46,7 @@ const KEYWORD_RULES={
   {categories:['Reklama'],words:["reklama","target","targeting","ads","smm","blogger","banner","baner","promoushn","reklama posti"]}
  ],
  income:[
-  {categories:['Maosh'],words:["oylik","maosh","avans","ish haqi","ish xaqi","ishdagi oylik"]},
+  {categories:['Maosh'],words:["oylik","maosh","avans","ish haqi","ish xaqi","ishdagi oylik","premiya","premia","bonus","mukofot"]},
   {categories:["Sovg'a"],words:["sovg'a","sovga","hadya","bonus","mukofot","bayram puli"]},
   {categories:["Oilaviy kirim"],words:["oilaviy kirim","oilaviy daromad","erim","turmush o'rtog'im","nafaqa","pensiya","oilaviy yordam"]},
   {categories:["Savdo tushumi"],words:["savdo","sotuv","tushum","kassa","xaridor","terminal","sotildi","realizatsiya","naqd savdo"]},
@@ -103,7 +109,8 @@ function current(s){return s.workspaces.find(w=>w.id===s.active)||null;}
 function setActive(s,workspaceId){if(!s.workspaces.some(w=>w.id===workspaceId))throw Error('Hisob topilmadi');s.active=workspaceId;}
 // Qoidaga asoslangan (AI xarajatisiz) bir-xabar parser.
 // Qiymat xabar boshida yoki oxirida bo‘lishi mumkin; xatoli raqam hech qachon saqlanmaydi.
-function parseFast(raw){
+function isSalaryNote(note){return /^(?:oylik|oyligim|maosh|maoshim|ish haqi|ish xaqi|ish haqim|avans|avansim|premiya|premia|bonus|mukofot|ishdagi oylik|ishdagi mukofot)(?: (?:oldim|oldik|tushdi|keldi|berildi|olindi))?$/.test(normalizeKeyword(note));}
+function parseFast(raw,workspaceKind){
  const input=String(raw??'').trim().replace(/\s+/g,' ');
  if(!input||input.length>260)return null;
  const numeric=String.raw`(?:\d{1,3}(?:[ .]\d{3})+|\d+)(?:[.,]\d{1,2})?`;
@@ -111,14 +118,15 @@ function parseFast(raw){
  const currency=String.raw`(?:so‘m|soʻm|so'm|som)`;
  const front=new RegExp('^([+-]?)\\s*('+numeric+')\\s*('+unit+')?\\s*(?:'+currency+')?\\s+(.+)$','i');
  const back=new RegExp('^(.+?)\\s+([+-]?)\\s*('+numeric+')\\s*('+unit+')?\\s*(?:'+currency+')?$','i');
- let match=front.exec(input), kind,number,scale,note;
+ let match=front.exec(input), kind,number,scale,note,sign;
  if(match){
-   kind=match[1]==='+'?'income':'expense';number=match[2];scale=match[3];note=match[4];
+   sign=match[1];kind=sign==='+'?'income':'expense';number=match[2];scale=match[3];note=match[4];
  } else {
    match=back.exec(input);if(!match)return null;
-   note=match[1];kind=match[2]==='+'?'income':'expense';number=match[3];scale=match[4];
+   note=match[1];sign=match[2];kind=sign==='+'?'income':'expense';number=match[3];scale=match[4];
  }
  note=cleanText(note,160);
+ if(workspaceKind==='personal'&&!sign&&isSalaryNote(note))kind='income';
  if(!note||/^[\d.,+\s-]+$/.test(note)||/^(ming|mln|million|millionta|k|so‘m|soʻm|so'm|som)$/i.test(note))return null;
  const normalized=number.replace(/(?<=\d)[ .](?=\d{3}(?:\D|$))/g,'');
  let n=Number(normalized.replace(',','.'));
@@ -131,7 +139,7 @@ function parseFast(raw){
 }
 // Telegram ro‘yxati: har bir qator — bitta alohida operatsiya.
 // Bittasi xato bo‘lsa, server birortasini ham bazaga kiritmaydi.
-function parseList(raw){
+function parseList(raw,workspaceKind){
  const input=String(raw??'');
  if(!/[\r\n]/.test(input))return null;
  const lines=input.split(/\r?\n/).map(t=>t.trim()).filter(Boolean);
@@ -146,7 +154,7 @@ function parseList(raw){
   const line=lines[i];
   const clean=line.replace(/^(?:[•●▪◦*]|[-–—]|\d{1,2}[.)-])\s+/u,'').trim();
   let parsed=null;
-  try{parsed=parseFast(clean);}catch(e){parsed=null;}
+  try{parsed=parseFast(clean,workspaceKind);}catch(e){parsed=null;}
   if(!parsed)errors.push({line:i+1,reason:line.slice(0,100)});
   else items.push({...parsed,line:i+1});
  }
@@ -191,12 +199,23 @@ function splitSalary(value){
 function allocationEnabled(w){
  return w.allocation_enabled===undefined ? w.kind==='personal' : w.allocation_enabled===true;
 }
+function salaryIncome(t){return t.kind==='income'&&(t.category==='Maosh'||['Avans','Premiya','Mukofot','Bonus'].includes(t.category)||isSalaryNote(t.note));}
+function expenseBucket(t,w){
+ const map=cat=>cat==='Ehson'?'ehson':cat==='Investitsiya'?'kelajak':cat==='Biznes xarajati'?'biznes':["Dam olish","Shaxsiy xarid","Sovg'a","Tug'ilgan kun"].includes(cat)?'oyin':null;
+ const direct=map(t.category);if(direct)return direct;
+ // Legacy rows are not rewritten. Infer only from older broad categories in personal accounts.
+ if(w?.kind==='personal'&&['Boshqa','Oziq-ovqat','Uy-ro\'zg\'or'].includes(t.category)){
+  const inferred=categoryFor({kind:'personal',categories:BASE.personal,keywords:{income:{},expense:{}}},'expense',t.note);
+  const bucket=map(inferred);if(bucket)return bucket;
+ }
+ return w?.kind==='business'?'biznes':'rozgor';
+}
 function salaryAllocation(w,month){
  if(!validMonth(month))throw Error('Oy noto‘g‘ri');
  if(!allocationEnabled(w))return null;
  // Hech qachon umumiy kirim yoki savdo tushumini taqsimlamaymiz: faqat Maosh.
  if(!w.categories?.income?.includes('Maosh'))return null;
- const salaries=w.transactions.filter(t=>t.kind==='income'&&t.category==='Maosh'&&t.date.slice(0,7)===month);
+ const salaries=w.transactions.filter(t=>(w.kind==='personal'?salaryIncome(t):t.kind==='income'&&t.category==='Maosh')&&t.date.slice(0,7)===month);
  if(!salaries.length)return null;
  const buckets={salary:0,ehson:0,kelajak:0,oyin:0,rozgor:0,biznes:0};
  for(const tx of salaries){
@@ -238,6 +257,7 @@ function salaryAllocation(w,month){
  }
  return {
   ...buckets,month,sourceCount:salaries.length,targets,
+   walletUsage:Object.fromEntries(SALARY_BUCKETS.map(([key])=>{const rows=w.transactions.filter(t=>t.kind==='expense'&&t.date.slice(0,7)===month&&expenseBucket(t,w)===key);const spent=rows.reduce((sum,t)=>sum+t.amount,0);return [key,{spent,remaining:buckets[key]-spent}];})),
   hardTotal:fixedSum,hardShortfall:Math.max(0,fixedSum-buckets.rozgor),
   leisureShortfall:Math.max(0,(Number(hard['Dam olish'])||0)-buckets.oyin),
   unallocatedHousehold:Math.max(0,available-distributed)
@@ -357,5 +377,5 @@ function validate(raw){
  return result;
 }
 function csv(w){const quote=v=>{let s=String(v??'');if(/^[\s]*[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};return '\ufeff'+[['Sana','Hisob','Turi','Kategoriya','Summa','Izoh'],...w.transactions.map(t=>[t.date,w.name,t.kind==='income'?'Daromad':'Xarajat',t.category,t.amount,t.note])].map(r=>r.map(quote).join(';')).join('\r\n');}
-return {KINDS,BASE,SALARY_RATES,HOUSEHOLD_WEIGHTS,SALARY_BUCKETS,splitSalary,allocationEnabled,salaryAllocation,effectiveCategoryLimit,KEYWORD_RULES,parseList,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,reportComparison,validate,csv,spent};
+return {KINDS,BASE,SALARY_RATES,HOUSEHOLD_WEIGHTS,SALARY_BUCKETS,splitSalary,allocationEnabled,salaryAllocation,isSalaryNote,salaryIncome,expenseBucket,effectiveCategoryLimit,KEYWORD_RULES,parseList,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,reportComparison,validate,csv,spent};
 });
