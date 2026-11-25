@@ -104,17 +104,23 @@ function makeFinanceApi({db,botToken,ensure}){
  }
  async function monthHistory(uid,wid){
   await owned(uid,wid);
-  const [active,closedMonths]=await Promise.all([
-   db.execute({sql:"SELECT substr(day,1,7) AS month,COUNT(*) AS n,COALESCE(SUM(CASE WHEN kind='income' THEN amount ELSE 0 END),0) AS income,COALESCE(SUM(CASE WHEN kind='expense' THEN amount ELSE 0 END),0) AS expense FROM mn_transactions WHERE uid=? AND workspace_id=? GROUP BY substr(day,1,7) ORDER BY month DESC LIMIT 120",
-    args:[uid,wid]}),
-   db.execute({sql:'SELECT month,closed_at FROM mn_closed_months WHERE uid=? AND workspace_id=? ORDER BY month DESC LIMIT 120',args:[uid,wid]})
-  ]);
-  const closedMap=Object.fromEntries(closedMonths.rows.map(x=>[String(x.month),String(x.closed_at)]));
-  const months=active.rows.map(row=>({month:String(row.month),count:Number(row.n),income:Number(row.income),expense:Number(row.expense),
-   closed_at:closedMap[String(row.month)]||null}));
-  const names=new Set(months.map(m=>m.month));
-  for(const [month,closed_at] of Object.entries(closedMap))if(!names.has(month))months.push({month,count:0,income:0,expense:0,closed_at});
-  return months.sort((a,b)=>b.month.localeCompare(a.month));
+  const [active,closedMonths,budgetMonths]=await db.batch([
+   {sql:"SELECT substr(day,1,7) AS month,COUNT(*) AS n,COALESCE(SUM(CASE WHEN kind='income' THEN amount ELSE 0 END),0) AS income,COALESCE(SUM(CASE WHEN kind='expense' THEN amount ELSE 0 END),0) AS expense FROM mn_transactions WHERE uid=? AND workspace_id=? GROUP BY substr(day,1,7) ORDER BY month DESC LIMIT 120",args:[uid,wid]},
+   {sql:'SELECT month,closed_at FROM mn_closed_months WHERE uid=? AND workspace_id=? ORDER BY month DESC LIMIT 120',args:[uid,wid]},
+   {sql:'SELECT DISTINCT month FROM mn_budgets WHERE workspace_id=? ORDER BY month DESC LIMIT 120',args:[wid]}
+  ],'read');
+  const current=F.today().slice(0,7);
+  const months=new Map();
+  const get=month=>{
+   if(!months.has(month))months.set(month,{month,count:0,income:0,expense:0,closed_at:null,period_status:month<current?'past':month===current?'current':'future'});
+   return months.get(month);
+  };
+  get(current);
+  for(const row of active.rows)Object.assign(get(String(row.month)),{count:Number(row.n),income:Number(row.income),expense:Number(row.expense)});
+  for(const row of budgetMonths.rows)get(String(row.month));
+  for(const row of closedMonths.rows)Object.assign(get(String(row.month)),{closed_at:String(row.closed_at),period_status:'closed'});
+  return [...months.values()].sort((a,b)=>b.month.localeCompare(a.month));
+
  }
  async function exportMonth(uid,wid,month){
   const w=await owned(uid,wid);
@@ -159,11 +165,12 @@ function makeFinanceApi({db,botToken,ensure}){
  async function ledger(uid,wid,month){
   const w=await owned(uid,wid);
   if(!validMonth(month))throw Error('Hisobot oyi noto‘g‘ri');
-  const [rows,bs]=await Promise.all([
-   db.execute({sql:'SELECT id,kind,category,amount,note,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<? ORDER BY day DESC,rowid DESC LIMIT 10001',
-    args:[uid,wid,month+'-01',nextMonth(month)+'-01']}),
-   db.execute({sql:'SELECT category,limit_amount FROM mn_budgets WHERE workspace_id=? AND month=?',args:[wid,month]})
-  ]);
+  // Opening balance is derived, never inserted as income. Read it with the selected month in one snapshot.
+  const [rows,bs,prior]=await db.batch([
+   {sql:'SELECT id,kind,category,amount,note,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<? ORDER BY day DESC,rowid DESC LIMIT 10001',args:[uid,wid,month+'-01',nextMonth(month)+'-01']},
+   {sql:'SELECT category,limit_amount FROM mn_budgets WHERE workspace_id=? AND month=?',args:[wid,month]},
+   {sql:"SELECT COALESCE(SUM(CASE WHEN kind='income' THEN amount WHEN kind='expense' THEN -amount ELSE 0 END),0) AS net FROM mn_transactions WHERE uid=? AND workspace_id=? AND day<?",args:[uid,wid,month+'-01']}
+  ],'read');
   if(rows.rows.length>10000)throw Error('Oylik hisobot uchun 10 000 tadan ortiq yozuv bor. Hisob noto‘g‘ri chiqmasligi uchun bu oy bo‘laklab tekshirilishi kerak.');
   const transactions=rows.rows.map(r=>({id:String(r.id),kind:r.kind,category:String(r.category),amount:Number(r.amount),note:String(r.note||''),date:String(r.day)}));
   const budgets=Object.fromEntries(bs.rows.map(r=>[String(r.category),Number(r.limit_amount)]));
@@ -174,7 +181,7 @@ function makeFinanceApi({db,botToken,ensure}){
   const closedAt=await closed(uid,wid,month);
   const plan=F.salaryAllocation(shadow,month);
   return {workspace:{id:w.id,kind:w.kind,name:w.name},month,closed_at:closedAt,reset_backup:await resetBackup(uid,wid,month),transactions,more:false,
-    totals:{income:summary.income,expense:summary.expense,net:summary.net},categories:summary.budgets,category_options:prefs.categories,keywords:prefs.keywords,budgets,plan,allocation_enabled};
+    totals:{income:summary.income,expense:summary.expense,net:summary.net,opening_balance:Number(prior.rows[0].net),closing_balance:Number(prior.rows[0].net)+summary.net},categories:summary.budgets,category_options:prefs.categories,keywords:prefs.keywords,budgets,plan,allocation_enabled};
  }
  async function execute(uid,body){
   const opId=body?.op_id,wid=body?.workspace_id,action=body?.action;
