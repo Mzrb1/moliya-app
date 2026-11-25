@@ -378,7 +378,7 @@ function renderPlan(data){
  }
  container.append(el('div','value',money(p.salary)));
  for(const [field,label] of F.SALARY_BUCKETS){container.append(line(label,money(p[field])));const usage=p.walletUsage?.[field];if(usage)container.append(el('div','tiny','Sarflandi: '+money(usage.spent)+' · Qoldiq: '+money(usage.remaining)));}
- if(maybeSalary.length){const fix=el('button','btn alt','⚠️ Avans yoki maosh yozuvini tekshirish');fix.type='button';fix.onclick=()=>chooseView('records');container.append(fix);}
+ if(maybeSalary.length){const fix=el('button','btn alt',editableSalary?'⚠️ Avans/maoshni kirimga to‘g‘rilash':'⚠️ Avans yoki maosh yozuvini tekshirish');fix.type='button';fix.onclick=()=>{if(!editableSalary){chooseView('records');return;}if(!confirm('«'+editableSalary.note+'» '+money(editableSalary.amount)+' yozuvini daromadga o‘zgartirasizmi? Yangi yozuv qo‘shilmaydi.'))return;try{enqueue({action:'edit',transaction_id:editableSalary.id,entry:{kind:'income',category:'Maosh',amount:editableSalary.amount,note:editableSalary.note,date:editableSalary.date}});alertMessage('Kirim to‘g‘rilandi. Taqsimot yangilandi.',true);}catch(e){alertMessage(e.message);}};container.append(fix);}
  if(p.hardShortfall>0)container.append(el('div','notice','⚠️ Qat’iy Ro‘zg‘or limitlari uchun '+money(p.hardShortfall)+' yetishmaydi. Qat’iy limitlar avtomatik kamaytirilmaydi.'));
  if(p.leisureShortfall>0)container.append(el('div','notice','⚠️ Dam olish limitiga '+money(p.leisureShortfall)+' yetishmaydi.'));
 }
@@ -830,22 +830,22 @@ function normaliseQuickKind(parsed,workspaceKind,rawLine){
  return {...parsed,kind:'income'};
 }
 function parseInput(raw){
- const list=F.parseList(raw);
+ const w=current();
+ const list=F.parseList(raw,w.kind);
  let items;
  if(list){
   if(list.errors.length){throw Error('Quyidagi qatorlarni tuzating: '+list.errors.slice(0,4).map(e=>e.line+'-qator ('+e.reason+')').join(', '));}
   items=list.items;
  }else{
-  let one;try{one=F.parseFast(raw);}catch(e){one=null;}
+  let one;try{one=F.parseFast(raw,w.kind);}catch(e){one=null;}
   if(!one)throw Error('Misol: 25 ming taksi yoki Tushlik 35000');
   items=[one];
  }
- const w=current();
  const prefs=compute()?.prefs||{categories:F.BASE[w.kind],keywords:{income:{},expense:{}}};
  const lines=String(raw).split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
  if(lines.length>1&&/^(?:bugungi\s+)?(?:xarajat(?:lar(?:im)?)?|kirim(?:lar)?|ro['‘ʻ]yxat|royxat)(?:\s+(?:ro['‘ʻ]yxati|royxati))?\s*:?$/i.test(lines[0]))lines.shift();
  return items.map((x,i)=>{
-  const row=normaliseQuickKind(x,w.kind,lines[i]||'');
+  const row=x;
   const category=row.kind==='income'&&w.kind==='personal'&&isSalaryNote(row.note)&&prefs.categories.income.includes('Maosh')
    ?'Maosh':F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},row.kind,row.note);
   return {kind:row.kind,amount:row.amount,date:F.today(),note:row.note,category};
