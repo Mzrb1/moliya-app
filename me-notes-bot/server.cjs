@@ -238,10 +238,21 @@ async function handleMessage(update){
   const month=(text.split(/\s+/)[1]||thisMonth());
   if(!F.validMonth(month)){await send(chat_id,'Oy noto‘g‘ri. Misol: '+command+' 2026-10');return;}
   if(command==='/taqsimot'){await send(chat_id,salaryText(await monthlySalaryPlan(uid,w,month)));return;}
-  const q=await db.execute({sql:'SELECT kind, SUM(amount) AS total FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<? GROUP BY kind',args:[uid,w.id,month+'-01',nextMonth(month)+'-01']});
-  const totals=Object.fromEntries(q.rows.map(r=>[r.kind,Number(r.total)]));
-  const inc=totals.income||0,out=totals.expense||0;
-  await send(chat_id,'📊 '+w.name+' — '+month+'\n➕ Daromad: '+F.money(inc)+'\n➖ Xarajat: '+F.money(out)+'\n📌 Farq: '+F.money(inc-out)+'\n(Bankdagi haqiqiy qoldiq emas)');
+  const ledger=await financeApi.ledger(uid,w.id,month);
+  const comparison=F.reportComparison({expense:ledger.totals.expense,budgets:ledger.categories});
+  const f=F.money;
+  let heading='📊 '+w.name+' — '+month+(ledger.closed_at?' · Arxiv':'')+'\n➕ Daromad: '+f(ledger.totals.income)+'\n➖ Xarajat: '+f(ledger.totals.expense)+'\n📌 Hisobiy farq: '+f(ledger.totals.net)+'\n(Bankdagi haqiqiy qoldiq emas)';
+  if(comparison.hasPlan)heading+='\n\nReja: '+f(comparison.plannedTotal)+'\nLimitli xarajat: '+f(comparison.plannedSpent)+'\nLimitdan oshgan: '+f(comparison.over);
+  else heading+='\n\nBu oyga limit belgilanmagan.';
+  if(comparison.unplannedSpent>0)heading+='\nRejasiz xarajat: '+f(comparison.unplannedSpent);
+  let chunk=heading;
+  for(const row of comparison.rows){
+   const diff=row.remaining===null?'Reja yo‘q':row.remaining<0?'Oshgan: '+f(-row.remaining):'Qolgan limit: '+f(row.remaining);
+   const part='\n\n'+row.category+' ('+row.share.toFixed(1)+'%)\nReja: '+(row.limit===null?'—':f(row.limit))+' · Haqiqiy: '+f(row.spent)+'\n'+diff;
+   if(chunk.length+part.length>3500){await send(chat_id,chunk);chunk='📊 Hisobot davomi';}
+   chunk+=part;
+  }
+  await send(chat_id,chunk);
   return;
  }
  if(command==='/bekor'){
