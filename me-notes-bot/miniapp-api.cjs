@@ -247,12 +247,16 @@ function makeFinanceApi({db,botToken,ensure}){
    if(limit===0)steps.push({sql:'DELETE FROM mn_budgets WHERE workspace_id=? AND month=? AND category=?',args:[wid,body.month,body.category]});
    else steps.push({sql:'INSERT INTO mn_budgets(workspace_id,month,category,limit_amount) VALUES(?,?,?,?) ON CONFLICT(workspace_id,month,category) DO UPDATE SET limit_amount=excluded.limit_amount',args:[wid,body.month,body.category,limit]});
   }else if(action==='delete'){
-   if(typeof body.transaction_id!=='string'||body.transaction_id.length>96)throw Error('Yozuv ID noto‘g‘ri');
+   if(!validId(body.transaction_id)||body.transaction_id.startsWith('pending:'))throw Error('Yozuv ID noto‘g‘ri');
    const row=await db.execute({sql:'SELECT day FROM mn_transactions WHERE uid=? AND workspace_id=? AND id=?',args:[uid,wid,body.transaction_id]});
-   if(!row.rows.length)throw Error('O‘chiriladigan yozuv topilmadi');
-   await assertMonthWritable(uid,wid,monthOfDay(String(row.rows[0].day)));
+   // Delete is idempotent within the authenticated user's owned workspace.
+   // A stale queued delete must not block later operations; never touch other accounts.
    steps.push({sql:'INSERT INTO mn_api_ops(id,uid,workspace_id,kind,created) VALUES(?,?,?,?,?)',args:[opId,uid,wid,action,now]});
-   steps.push({sql:'DELETE FROM mn_transactions WHERE uid=? AND workspace_id=? AND id=?',args:[uid,wid,body.transaction_id]});
+   if(row.rows.length){
+    await assertMonthWritable(uid,wid,monthOfDay(String(row.rows[0].day)));
+    steps.push({sql:'DELETE FROM mn_transactions WHERE uid=? AND workspace_id=? AND id=?',args:[uid,wid,body.transaction_id]});
+    result={deleted:1};
+   }else result={deleted:0,already_absent:true};
   }else if(action==='edit'){
    if(typeof body.transaction_id!=='string'||body.transaction_id.length>96)throw Error('Yozuv ID noto‘g‘ri');
    const prev=await db.execute({sql:'SELECT id,kind,category,amount,note,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND id=?',args:[uid,wid,body.transaction_id]});
