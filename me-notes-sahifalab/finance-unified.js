@@ -206,7 +206,7 @@ async function fetchLedger(){
  // Pin an asynchronous response to the requested account and month, not the
  // account/month currently selected when it eventually arrives.
  if(data.workspace?.id!==wid||data.month!==month)throw Error('Serverdan boshqa oy yoki hisob kelgan');
- state.base[wid+'|'+month]={transactions:data.transactions,budgets:data.budgets,allocation_enabled:data.allocation_enabled,closed_at:data.closed_at||null,reset_backup:data.reset_backup||null,
+ state.base[wid+'|'+month]={transactions:data.transactions,budgets:data.budgets,allocation_enabled:data.allocation_enabled,closed_at:data.closed_at||null,reset_backup:data.reset_backup||null,opening_balance:data.totals?.opening_balance??null,
   category_options:data.category_options||F.BASE[workspace.kind],
   keywords:data.keywords||{income:{},expense:{}}};
  save();
@@ -426,7 +426,7 @@ function closeEdit(){
  $('edit-card').classList.add('hidden');
 }
 function renderComparison(data){
- const host=$('report-comparison');host.replaceChildren();
+ const host=$('report-comparison');if(!host)return;host.replaceChildren();
  if(!cached()){host.append(el('p','tiny','Hisobot ma’lumotlari yuklanmagan.'));return;}
  const comparison=F.reportComparison(data.summary);
  const title=el('div','row between');
@@ -464,6 +464,13 @@ function renderComparison(data){
 }
 function renderReport(data){
  renderComparison(data);
+ const opening=cached()?.opening_balance;
+ const known=typeof opening==='number'&&Number.isFinite(opening);
+ const pending=state.queue.some(op=>op.workspace_id===state.active);
+ $('report-opening').textContent=known?money(opening):'—';
+ $('report-closing').textContent=known?money(opening+data.summary.net):'—';
+ $('report-balance-note').textContent=(!state.online||pending?'Sinxronlashdan keyin qoldiq aniqlashtiriladi. ':'')+'Faqat yozilgan kirim va chiqimlar bo‘yicha hisobiy qoldiq, bank balansi emas. O‘tgan oy qoldig‘i yangi daromadga qo‘shilmaydi.';
+ $('report-period').textContent=state.month+(data.closedAt?' · Yopilgan arxiv':state.month<F.today().slice(0,7)?' · O‘tgan oy arxivi':'');
  $('report-income').textContent=money(data.summary.income);
  $('report-expense').textContent=money(data.summary.expense);
  $('report-net').textContent=money(data.summary.net);
@@ -516,24 +523,25 @@ function renderSettings(data){
 }
 
 function renderMonthHistory(){
- const host=$('month-history');if(!host)return;
- host.replaceChildren();
+ const host=$('month-history'),reportHost=$('report-month-history');if(!host)return;
+ host.replaceChildren();reportHost?.replaceChildren();
  const data=compute();
  const known=state.months||[];
  if(!known.length)host.append(el('p','tiny','Oldingi oylar ro‘yxati serverga ulanganda ko‘rinadi.'));
  for(const item of known){
   const block=el('div','line row between'),details=el('div','grow');
-  details.append(el('div','strong',item.month+' · '+(item.closed_at?'🗃 Arxiv':'Ochiq')));
+  details.append(el('div','strong',item.month+' · '+(item.closed_at?'🗃 Yopilgan':item.month<F.today().slice(0,7)?'🗃 O‘tgan oy':item.month===F.today().slice(0,7)?'Joriy oy':'Kelajak oy')));
   details.append(el('div','tiny',item.count+' ta yozuv · kirim '+money(item.income)+' · chiqim '+money(item.expense)));
   const show=el('button','btn alt','Ko‘rish');show.type='button';
   show.style.cssText='min-height:32px;padding:6px 10px;font-size:12px';
   show.disabled=state.month===item.month;
   show.onclick=()=>changeMonth(item.month);
   block.append(details,show);host.append(block);
+  if(reportHost){const button=el('button','btn alt',item.month+(item.closed_at?' · Yopilgan':item.month<F.today().slice(0,7)?' · Arxiv':''));button.type='button';button.disabled=state.month===item.month;button.onclick=()=>changeMonth(item.month);reportHost.append(button);}
  }
  const closed=!!data?.closedAt,current=F.today().slice(0,7);
  $('month-archive-status').textContent=state.month+' — '+(closed?'arxivlangan (faqat o‘qish)':
-  state.month>=current?'joriy yoki kelajak oy (yakunlab bo‘lmaydi)':'ochiq o‘tgan oy');
+  state.month>=current?'joriy yoki kelajak oy (yakunlab bo‘lmaydi)':'o‘tgan oy arxivi · tahrirga ochiq');
  $('archive-close').disabled=!data||closed||state.month>=current||!state.online||!!state.queue.length;
  $('archive-reopen').disabled=!data||!closed||!state.online||!!state.queue.length;
  $('archive-export').disabled=!data||!state.online||!!state.queue.length;
