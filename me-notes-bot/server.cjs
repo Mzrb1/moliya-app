@@ -115,15 +115,15 @@ function checkSecret(input){
 }
 // Chatdagi rejalar serverdagi TURSO yozuvlaridan hisoblanadi, Mini App localStorage’dan emas.
 async function monthlySalaryPlan(uid,w,range=thisMonth()){
- if(w.kind!=='personal')return null;
  if(!F.validMonth(range))throw Error('Oy noto‘g‘ri');
- const q=await db.execute({sql:"SELECT amount,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND kind='income' AND category='Maosh' AND day>=? AND day<?",
+ const q=await db.execute({sql:"SELECT kind,category,amount,note,day FROM mn_transactions WHERE uid=? AND workspace_id=? AND day>=? AND day<?",
  args:[uid,w.id,range+'-01',nextMonth(range)+'-01']});
  if(!q.rows.length)return null;
  const b=await db.execute({sql:'SELECT category,limit_amount FROM mn_budgets WHERE workspace_id=? AND month=?',args:[w.id,range]});
  const hard=Object.fromEntries(b.rows.map(row=>[row.category,Number(row.limit_amount)]));
  const prefs=await financeApi.preferences(w);
- const temp={kind:'personal',categories:prefs.categories,keywords:prefs.keywords,transactions:q.rows.map(row=>({kind:'income',category:'Maosh',amount:Number(row.amount),date:String(row.day)})),budgets:{[range]:hard}};
+ const settings=await db.execute({sql:'SELECT enabled FROM mn_workspace_allocation WHERE workspace_id=? AND uid=?',args:[w.id,uid]});
+ const temp={kind:w.kind,allocation_enabled:settings.rows.length?Number(settings.rows[0].enabled)===1:w.kind==='personal',categories:prefs.categories,keywords:prefs.keywords,transactions:q.rows.map(row=>({kind:String(row.kind),category:String(row.category),note:String(row.note||''),amount:Number(row.amount),date:String(row.day)})),budgets:{[range]:hard}};
  return F.salaryAllocation(temp,range);
 }
 function salaryText(plan){
@@ -136,13 +136,14 @@ function salaryText(plan){
    '🎉 O‘yin-kulgi: '+f(plan.oyin)+'\n'+
    '🏠 Ro‘zg‘or: '+f(plan.rozgor)+'\n'+
    '💼 Biznes: '+f(plan.biznes)+'\n';
+ if(plan.walletUsage)for(const [key,label] of F.SALARY_BUCKETS)text+='\n'+label+' sarflandi: '+f(plan.walletUsage[key].spent)+' · qoldiq: '+f(plan.walletUsage[key].remaining);
  if(plan.hardShortfall>0)text+='\n⚠️ Ro‘zg‘or qat’iy limitlariga '+f(plan.hardShortfall)+' YETMAYDI. Qat’iy limitlar o‘zgarmadi.\n';
  if(plan.leisureShortfall>0)text+='\n⚠️ Dam olish qat’iy limitiga '+f(plan.leisureShortfall)+' YETMAYDI.\n';
  return text+'\nBu haqiqiy pul o‘tkazmasi yoki qo‘shimcha xarajat emas. Yangi Yagona moliya Mini App ushbu Turso hisobi bilan birga ishlaydi.';
 }
 
 async function saveTelegramList(update,uid,w,chat_id,raw){
- const parsed=F.parseList(raw);
+ const parsed=F.parseList(raw,w.kind);
  if(!parsed)return false;
  if(parsed.errors.length){
   const sample=parsed.errors.slice(0,5).map(e=>e.line+'-qator: '+e.reason).join('\n');
@@ -205,7 +206,7 @@ async function saveTelegramList(update,uid,w,chat_id,raw){
   }
  }
  if(warnings.length)answer+='\n\n'+warnings.join('\n');
- if(result.some(x=>x.kind==='income'&&x.category==='Maosh')&&w.kind==='personal'){
+ if(result.some(F.salaryIncome)&&w.kind==='personal'){
   answer+='\n\n🧮 Oylik reja yangilandi. /taqsimot';
  }
  answer+='\n↩️ Shu ro‘yxatni bekor qilish uchun pastdagi tugmani bosing.';
@@ -284,7 +285,7 @@ async function handleMessage(update){
  }
  if(command.startsWith('/')){await send(chat_id,'Buyruq topilmadi. /yordam');return;}
  if(await saveTelegramList(update,uid,w,chat_id,text))return;
- let parsed;try{parsed=F.parseFast(text);}catch(e){parsed=null;}
+ let parsed;try{parsed=F.parseFast(text,w.kind);}catch(e){parsed=null;}
  if(!parsed){await send(chat_id,'Yozuvni tushunmadim. Masalan:\n25 ming taksi\n+3 mln oylik');return;}
  const prefs=await financeApi.preferences(w);
  const cat=F.categoryFor({kind:w.kind,categories:prefs.categories,keywords:prefs.keywords},parsed.kind,parsed.note);
@@ -304,7 +305,7 @@ async function handleMessage(update){
   if(limit>0&&before<limit&&after>=limit)warning='\n⛔ Limit tugadi yoki oshdi!';
   else if(limit>0&&before<.8*limit&&after>=.8*limit)warning='\n⚠️ Limitning 80% iga yetdingiz.';
  }
- const salaryInfo=(parsed.kind==='income'&&cat==='Maosh'&&w.kind==='personal')?'\n\n'+salaryText(await monthlySalaryPlan(uid,w)):'';
+ const salaryInfo=(F.salaryIncome({...parsed,category:cat})&&w.kind==='personal')?'\n\n'+salaryText(await monthlySalaryPlan(uid,w)):'';
  await send(chat_id,(parsed.kind==='income'?'✅ Daromad':'✅ Xarajat')+' saqlandi\n📁 '+w.name+'\n🏷 '+cat+'\n💰 '+F.money(parsed.amount)+'\n📝 '+parsed.note+warning+salaryInfo+'\n↩️ Xato bo‘lsa, pastdagi tugmani bosing.',{reply_markup:undo.singleButton(savedId)});
 }
 async function handleCallback(update){
