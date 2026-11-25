@@ -110,10 +110,12 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inl
 <div class="flex gap-top"><button type="submit" class="btn">O‘zgarishni saqlash</button><button type="button" id="edit-cancel" class="btn alt">Bekor</button></div></form></div>
 <div class="card"><h2>🧾 Yozuvlar</h2><div id="records"></div></div></section>
 <section id="view-report" class="hidden">
-<div class="card"><h2>📊 Oylik hisobot</h2>
+<div class="card"><h2>📊 Oylik hisobot</h2><p id="report-period" class="tiny"></p><div id="report-month-history" class="flex" style="flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
 <div class="metrics"><div class="metric"><div class="tiny">Daromad</div><strong id="report-income" class="number green">—</strong></div><div class="metric"><div class="tiny">Xarajat</div><strong id="report-expense" class="number red">—</strong></div></div>
 <div class="gap-top"><span class="tiny">Hisobiy farq (bank balansi emas)</span><div class="value" id="report-net">—</div></div></div>
+<div class="card"><h2>Hisobiy qoldiq</h2><div class="metrics"><div class="metric"><div class="tiny">Oydan oldingi qoldiq</div><strong id="report-opening" class="number">—</strong></div><div class="metric"><div class="tiny">Oy oxiridagi qoldiq</div><strong id="report-closing" class="number">—</strong></div></div><p id="report-balance-note" class="tiny"></p></div>
 <div class="card"><h2>Kategoriyalar kesimida</h2><div id="report-categories"></div></div>
+<div class="card"><h2>Reja va haqiqiy xarajat</h2><div id="report-comparison"></div></div>
 <div class="card"><h2>Sinxronlash holati</h2><p id="report-sync" class="tiny"></p></div>
 </section><section id="view-budget" class="hidden"><div class="card"><h2>🧮 Oylik taqsimot</h2>
 <div class="headline allocation-control"><span class="strong">Shu hisob uchun taqsimot</span><button id="allocation-toggle" type="button" class="btn alt">Tekshirilmoqda…</button></div>
