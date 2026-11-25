@@ -425,7 +425,45 @@ function closeEdit(){
  editingId=null;
  $('edit-card').classList.add('hidden');
 }
+function renderComparison(data){
+ const host=$('report-comparison');host.replaceChildren();
+ if(!cached()){host.append(el('p','tiny','Hisobot ma’lumotlari yuklanmagan.'));return;}
+ const comparison=F.reportComparison(data.summary);
+ const title=el('div','row between');
+ title.append(el('span','strong',state.month),el('span','tiny',data.closedAt?'🗃 Arxiv':state.month<F.today().slice(0,7)?'O‘tgan oy':'Joriy oy'));
+ host.append(title);
+ const legend=el('div','tiny','Ko‘k — reja · Yashil — haqiqiy xarajat · Qizil — limitdan oshgan');host.append(legend);
+ if(!comparison.hasPlan)host.append(el('p','tiny','Bu oyga limit belgilanmagan. Byudjet bo‘limida reja tuzing.'));
+ else{
+  host.append(line('Rejalashtirilgan limitlar jami',money(comparison.plannedTotal)));
+  host.append(line('Limitli kategoriyalardagi xarajat',money(comparison.plannedSpent)));
+  host.append(line('Kategoriyalar bo‘yicha ortiqcha xarajat',money(comparison.over)));
+ }
+ if(comparison.unplannedSpent>0)host.append(line('Rejasiz xarajatlar',money(comparison.unplannedSpent)));
+ for(const item of comparison.rows){
+  const block=el('div','line');
+  const top=el('div','row between');
+  top.append(el('span','strong',item.category),el('span','tiny',item.mode==='fixed'?'Qat’iy reja':item.mode==='auto'?'Avtomatik reja':'Reja yo‘q'));
+  block.append(top,line('Reja',item.limit===null?'Belgilanmagan':money(item.limit)),line('Haqiqiy',money(item.spent),item.share.toFixed(1)+'% · jami xarajatdan'));
+  const scale=Math.max(item.spent,item.limit||0,1);
+  const addBar=(value,color,label)=>{
+   const bar=el('div','bar'),fill=el('div','bar-fill');
+   bar.setAttribute('role','img');bar.setAttribute('aria-label',label+' '+money(value));
+   fill.style.width=(value/scale*100)+'%';fill.style.background=color;
+   bar.append(fill);block.append(bar);
+  };
+  if(item.limit!==null)addBar(item.limit,'#3976dc','Reja');
+  addBar(item.spent,item.remaining!==null&&item.remaining<0?'#dc3545':'#16865c','Haqiqiy');
+  if(item.remaining!==null){
+   const diff=el('div','tiny',item.remaining<0?'Limitdan oshgan: '+money(-item.remaining):'Qolgan limit: '+money(item.remaining));
+   if(item.remaining<0)diff.style.color='#c24141';block.append(diff);
+  }
+  host.append(block);
+ }
+ host.append(el('p','tiny','Taqsimot — reja, pul o‘tkazmasi yoki xarajat emas. Qoldiq bank balansi emas. Arxivdagi oy rejasi o‘sha oy limitlaridan hisoblanadi.'));
+}
 function renderReport(data){
+ renderComparison(data);
  $('report-income').textContent=money(data.summary.income);
  $('report-expense').textContent=money(data.summary.expense);
  $('report-net').textContent=money(data.summary.net);
