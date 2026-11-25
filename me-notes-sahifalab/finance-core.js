@@ -200,13 +200,22 @@ function allocationEnabled(w){
  return w.allocation_enabled===undefined ? w.kind==='personal' : w.allocation_enabled===true;
 }
 function salaryIncome(t){return t.kind==='income'&&(t.category==='Maosh'||['Avans','Premiya','Mukofot','Bonus'].includes(t.category)||isSalaryNote(t.note));}
-function expenseBucket(t){if(t.category==='Ehson')return 'ehson';if(t.category==='Investitsiya')return 'kelajak';if(t.category==='Biznes xarajati')return 'biznes';if(["Dam olish","Shaxsiy xarid","Sovg'a","Tug'ilgan kun"].includes(t.category))return 'oyin';return 'rozgor';}
+function expenseBucket(t,w){
+ const map=cat=>cat==='Ehson'?'ehson':cat==='Investitsiya'?'kelajak':cat==='Biznes xarajati'?'biznes':["Dam olish","Shaxsiy xarid","Sovg'a","Tug'ilgan kun"].includes(cat)?'oyin':null;
+ const direct=map(t.category);if(direct)return direct;
+ // Legacy rows are not rewritten. Infer only from older broad categories in personal accounts.
+ if(w?.kind==='personal'&&['Boshqa','Oziq-ovqat','Uy-ro\'zg\'or'].includes(t.category)){
+  const inferred=categoryFor({kind:'personal',categories:BASE.personal,keywords:{income:{},expense:{}}},'expense',t.note);
+  const bucket=map(inferred);if(bucket)return bucket;
+ }
+ return w?.kind==='business'?'biznes':'rozgor';
+}
 function salaryAllocation(w,month){
  if(!validMonth(month))throw Error('Oy noto‘g‘ri');
  if(!allocationEnabled(w))return null;
  // Hech qachon umumiy kirim yoki savdo tushumini taqsimlamaymiz: faqat Maosh.
  if(!w.categories?.income?.includes('Maosh'))return null;
- const salaries=w.transactions.filter(t=>salaryIncome(t)&&t.date.slice(0,7)===month);
+ const salaries=w.transactions.filter(t=>(w.kind==='personal'?salaryIncome(t):t.kind==='income'&&t.category==='Maosh')&&t.date.slice(0,7)===month);
  if(!salaries.length)return null;
  const buckets={salary:0,ehson:0,kelajak:0,oyin:0,rozgor:0,biznes:0};
  for(const tx of salaries){
@@ -248,7 +257,7 @@ function salaryAllocation(w,month){
  }
  return {
   ...buckets,month,sourceCount:salaries.length,targets,
-   walletUsage:Object.fromEntries(SALARY_BUCKETS.map(([key])=>{const rows=w.transactions.filter(t=>t.kind==='expense'&&t.date.slice(0,7)===month&&expenseBucket(t)===key);const spent=rows.reduce((sum,t)=>sum+t.amount,0);return [key,{spent,remaining:buckets[key]-spent}];})),
+   walletUsage:Object.fromEntries(SALARY_BUCKETS.map(([key])=>{const rows=w.transactions.filter(t=>t.kind==='expense'&&t.date.slice(0,7)===month&&expenseBucket(t,w)===key);const spent=rows.reduce((sum,t)=>sum+t.amount,0);return [key,{spent,remaining:buckets[key]-spent}];})),
   hardTotal:fixedSum,hardShortfall:Math.max(0,fixedSum-buckets.rozgor),
   leisureShortfall:Math.max(0,(Number(hard['Dam olish'])||0)-buckets.oyin),
   unallocatedHousehold:Math.max(0,available-distributed)
