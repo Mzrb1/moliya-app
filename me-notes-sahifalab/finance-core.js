@@ -34,7 +34,7 @@ const KEYWORD_RULES={
   {categories:['Qarz va majburiyatlar'],words:["qarz","kredit","kredit to'lovi","bank krediti","nasiya","nasiyaga","bo'lib to'lash","foiz to'lovi","qarzni yopish"]},
   {categories:['Bolalar'],words:["farzand","bolalar","bolaga","bog'cha","pampers","taglik","o'yinchoq","chaqaloq","maktab formasi","bolalar kiyimi"]},
   {categories:['Ta\'lim'],words:["o'qish","o'quv","maktab","kurs","kontrakt","kitob","daftar","repetitor","dars","ustoz","universitet","ta'lim","o'qituvchi"]},
-  {categories:['Bozor','Oziq-ovqat'],words:["bozor","oziq ovqat","supermarket","market","magazin","do'kon","dukon","non","tuxum","go'sht","guruch","sabzi","kartoshka","meva","sabzavot","sut","shakar","tushlik","nonushta","kechki ovqat","restoran","kafe","osh","palov","kabob","somsa","burger","ichimlik","ovqat"]},
+  {categories:['Bozor','Oziq-ovqat'],words:["bozor","bozorlik","oziq ovqat","supermarket","market","magazin","do'kon","dukon","non","tuxum","go'sht","guruch","sabzi","kartoshka","meva","sabzavot","sut","shakar","tushlik","nonushta","kechki ovqat","restoran","kafe","osh","palov","kabob","somsa","burger","ichimlik","ovqat"]},
   {categories:['Kommunal'],words:["kommunal","elektr","svet","gaz","suv","internet","wifi","wi fi","telefon","mobil aloqa","tarif","beeline","ucell","uzmobile","mobiuz","chiqindi","axlat","issiq suv"]},
   {categories:['Sog\'liq'],words:["sog'liq","dori","apteka","dorixona","doktor","vrach","shifokor","poliklinika","shifoxona","kasalxona","analiz","tahlil","stomatolog","tish","ukol","davolanish","emlash"]},
   {categories:['Kiyim'],words:["kiyim","ko'ylak","kuylak","shim","futbolka","kurtka","krossovka","tufli","etik","poyabzal","ro'mol","sharf","kostyum","paypoq"]},
