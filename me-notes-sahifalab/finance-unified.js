@@ -462,6 +462,39 @@ function renderComparison(data){
  }
  host.append(el('p','tiny','Taqsimot — reja, pul o‘tkazmasi yoki xarajat emas. Qoldiq bank balansi emas. Arxivdagi oy rejasi o‘sha oy limitlaridan hisoblanadi.'));
 }
+// Local, dependency-free expense donut; financial data never leaves the device.
+function renderExpenseDonut(host,entries){
+ const total=entries.reduce((sum,[,value])=>sum+value,0);
+ if(!Number.isFinite(total)||total<=0)return;
+ const palette=['#2563eb','#0f9d78','#d97706','#9333ea','#db2777','#0891b2','#64748b','#805b43'];
+ // Bound the number of slices on small phones; the full category breakdown stays below.
+ const groups=entries.length>8?entries.slice(0,7).concat([['Qolgan '+(entries.length-7)+' ta kategoriya',entries.slice(7).reduce((sum,[,value])=>sum+value,0)]]):entries;
+ const panel=el('div');panel.style.cssText='margin:12px 0 18px;display:grid;gap:12px;justify-items:center';
+ const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
+ svg.setAttribute('viewBox','0 0 220 220');svg.setAttribute('role','img');svg.setAttribute('aria-label','Xarajatlar taqsimoti, jami '+money(total));
+ svg.style.cssText='width:100%;max-width:218px;height:auto;display:block;overflow:visible';
+ const circle=(color)=>{const c=document.createElementNS(ns,'circle');c.setAttribute('cx','110');c.setAttribute('cy','110');c.setAttribute('r','86');c.setAttribute('fill','none');c.setAttribute('stroke',color);c.setAttribute('stroke-width','30');return c;};
+ const circumference=2*Math.PI*86;
+ let offset=0;
+ groups.forEach(([category,value],index)=>{
+  const length=value/total*circumference,c=circle(palette[index]);
+  c.setAttribute('stroke-dasharray',length+' '+Math.max(0,circumference-length));
+  c.setAttribute('stroke-dashoffset',String(-offset));c.setAttribute('transform','rotate(-90 110 110)');
+  const title=document.createElementNS(ns,'title');title.textContent=category+': '+money(value)+' ('+(value/total*100).toFixed(1)+'%)';c.append(title);svg.append(c);offset+=length;
+ });
+ const center=document.createElementNS(ns,'text');center.setAttribute('x','110');center.setAttribute('y','102');center.setAttribute('text-anchor','middle');center.setAttribute('fill','currentColor');center.setAttribute('font-size','12');center.textContent='Jami xarajat';svg.append(center);
+ const amount=document.createElementNS(ns,'text');amount.setAttribute('x','110');amount.setAttribute('y','124');amount.setAttribute('text-anchor','middle');amount.setAttribute('fill','currentColor');amount.setAttribute('font-size','14');amount.setAttribute('font-weight','700');amount.textContent=money(total);if(amount.textContent.length>18){amount.setAttribute('textLength','142');amount.setAttribute('lengthAdjust','spacingAndGlyphs');}svg.append(amount);
+ panel.append(svg);
+ const legend=el('div');legend.style.cssText='width:100%;display:grid;gap:7px';
+ groups.forEach(([category,value],index)=>{
+  const row=el('div');row.style.cssText='display:flex;align-items:center;gap:8px;min-width:0';
+  const dot=el('span');dot.style.cssText='width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:'+palette[index];dot.setAttribute('aria-hidden','true');
+  const name=el('span','tiny',category);name.style.cssText='flex:1;min-width:0;overflow-wrap:anywhere';
+  const valueLabel=el('span','tiny',money(value)+' · '+(value/total*100).toFixed(1)+'%');valueLabel.style.cssText='text-align:right;flex-shrink:0';
+  row.append(dot,name,valueLabel);legend.append(row);
+ });
+ panel.append(legend);host.append(panel);
+}
 function renderReport(data){
  renderComparison(data);
  const opening=cached()?.opening_balance;
@@ -480,7 +513,9 @@ function renderReport(data){
   if(tx.kind==='expense')sums.set(tx.category,(sums.get(tx.category)||0)+tx.amount);
  }
  const entries=[...sums].sort((a,b)=>b[1]-a[1]);
- if(!entries.length){host.append(el('p','empty','Bu oyda hali xarajat yo‘q.'));}
+ if(!cached()){host.append(el('p','tiny','Hisobot ma’lumotlari yuklanmagan.'));}
+ else if(!entries.length){host.append(el('p','empty','Bu oyda hali xarajat yo‘q.'));}
+ else renderExpenseDonut(host,entries);
  for(const [category,value] of entries){
   const ratio=data.summary.expense?Math.round(value/data.summary.expense*100):0;
   const block=el('div','line');block.append(line(category,money(value),ratio+'% · jami chiqimdagi ulushi'));
