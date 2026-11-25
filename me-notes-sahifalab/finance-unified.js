@@ -259,6 +259,7 @@ function enqueue(data){
  if(!state.storageOK)throw Error('Xotirada saqlash imkoni yo‘q');
  if(state.queue.length>250)throw Error('Navbatda 250 tadan ko‘p amal. Avval internetni ulang');
  const op=newOp(data);
+ if(op.action==='delete'&&state.queue.some(x=>x.action==='delete'&&x.workspace_id===op.workspace_id&&x.transaction_id===op.transaction_id))return;
  state.queue.push(op);
  try{save();}catch(e){state.queue.pop();throw e;}
  render();noteStatus();flush();
@@ -271,6 +272,9 @@ async function flush(){
    const op=state.queue[0];
    try{
     await request('/op',{method:'POST',body:op});
+    if(op.action==='delete'){
+     for(const [key,snapshot] of Object.entries(state.base))if(key.startsWith(op.workspace_id+'|')&&Array.isArray(snapshot.transactions))snapshot.transactions=snapshot.transactions.filter(t=>t.id!==op.transaction_id);
+    }
     state.queue.shift();save();
     state.online=true;
    }catch(e){
