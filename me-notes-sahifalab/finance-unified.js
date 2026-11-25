@@ -425,42 +425,38 @@ function closeEdit(){
  editingId=null;
  $('edit-card').classList.add('hidden');
 }
+function compactReportRow(label,value){
+ const row=el('div','report-mini-row');row.append(el('span','tiny',label),el('strong','',value));return row;
+}
+function reportBar(value,scale,color,label){
+ const bar=el('div','bar'),fill=el('div','bar-fill');bar.setAttribute('role','img');bar.setAttribute('aria-label',label+' '+money(value));
+ fill.style.width=(value/Math.max(1,scale)*100)+'%';fill.style.background=color;bar.append(fill);return bar;
+}
 function renderComparison(data){
- const host=$('report-comparison');if(!host)return;host.replaceChildren();
- if(!cached()){host.append(el('p','tiny','Hisobot ma’lumotlari yuklanmagan.'));return;}
- const comparison=F.reportComparison(data.summary);
- const title=el('div','row between');
- title.append(el('span','strong',state.month),el('span','tiny',data.closedAt?'🗃 Arxiv':state.month<F.today().slice(0,7)?'O‘tgan oy':'Joriy oy'));
- host.append(title);
- const legend=el('div','tiny','Ko‘k — reja · Yashil — haqiqiy xarajat · Qizil — limitdan oshgan');host.append(legend);
- if(!comparison.hasPlan)host.append(el('p','tiny','Bu oyga limit belgilanmagan. Byudjet bo‘limida reja tuzing.'));
- else{
-  host.append(line('Rejalashtirilgan limitlar jami',money(comparison.plannedTotal)));
-  host.append(line('Limitli kategoriyalardagi xarajat',money(comparison.plannedSpent)));
-  host.append(line('Kategoriyalar bo‘yicha ortiqcha xarajat',money(comparison.over)));
+ const host=$('report-comparison'),hint=$('report-plan-hint');if(!host)return;host.replaceChildren();
+ if(!cached()){hint.textContent='';host.append(el('p','tiny','Hisobot ma’lumotlari yuklanmagan.'));return;}
+ const c=F.reportComparison(data.summary);
+ hint.textContent=c.hasPlan?(c.over?'Limitdan oshgan: '+money(c.over):'Reja doirasida'):'Limit belgilanmagan';
+ if(c.hasPlan){
+  host.append(compactReportRow('Jami reja',money(c.plannedTotal)),compactReportRow('Limitli xarajat',money(c.plannedSpent)),compactReportRow('Limitdan oshgan',money(c.over)));
  }
- if(comparison.unplannedSpent>0)host.append(line('Rejasiz xarajatlar',money(comparison.unplannedSpent)));
- for(const item of comparison.rows){
-  const block=el('div','line');
-  const top=el('div','row between');
-  top.append(el('span','strong',item.category),el('span','tiny',item.mode==='fixed'?'Qat’iy reja':item.mode==='auto'?'Avtomatik reja':'Reja yo‘q'));
-  block.append(top,line('Reja',item.limit===null?'Belgilanmagan':money(item.limit)),line('Haqiqiy',money(item.spent),item.share.toFixed(1)+'% · jami xarajatdan'));
-  const scale=Math.max(item.spent,item.limit||0,1);
-  const addBar=(value,color,label)=>{
-   const bar=el('div','bar'),fill=el('div','bar-fill');
-   bar.setAttribute('role','img');bar.setAttribute('aria-label',label+' '+money(value));
-   fill.style.width=(value/scale*100)+'%';fill.style.background=color;
-   bar.append(fill);block.append(bar);
-  };
-  if(item.limit!==null)addBar(item.limit,'#3976dc','Reja');
-  addBar(item.spent,item.remaining!==null&&item.remaining<0?'#dc3545':'#16865c','Haqiqiy');
-  if(item.remaining!==null){
-   const diff=el('div','tiny',item.remaining<0?'Limitdan oshgan: '+money(-item.remaining):'Qolgan limit: '+money(item.remaining));
-   if(item.remaining<0)diff.style.color='#c24141';block.append(diff);
+ if(c.unplannedSpent>0)host.append(compactReportRow('Rejasiz xarajat',money(c.unplannedSpent)));
+ host.append(el('p','tiny','Ko‘k — reja · yashil — xarajat · qizil — limitdan oshgan'));
+ for(const item of c.rows){
+  const block=el('div','report-compact-row'),top=el('div','row between');
+  top.append(el('strong','',item.category),el('span','tiny',item.mode==='fixed'?'Qat’iy':item.mode==='auto'?'Avtomatik':'Rejasiz'));block.append(top);
+  const values=el('div','report-compare-grid');
+  for(const [label,value] of [['Reja',item.limit===null?'—':money(item.limit)],['Haqiqiy',money(item.spent)]]){
+   const v=el('div');v.append(el('span','tiny',label),el('strong','',value));values.append(v);
   }
+  block.append(values);
+  const scale=Math.max(item.spent,item.limit||0,1);
+  if(item.limit!==null)block.append(reportBar(item.limit,scale,'#3976dc','Reja'));
+  block.append(reportBar(item.spent,scale,item.remaining!==null&&item.remaining<0?'#dc3545':'#16865c','Haqiqiy'));
+  if(item.remaining!==null)block.append(el('div','tiny '+(item.remaining<0?'red':'green'),(item.remaining<0?'Oshgan: ':'Qolgan: ')+money(Math.abs(item.remaining))));
   host.append(block);
  }
- host.append(el('p','tiny','Taqsimot — reja, pul o‘tkazmasi yoki xarajat emas. Qoldiq bank balansi emas. Arxivdagi oy rejasi o‘sha oy limitlaridan hisoblanadi.'));
+ host.append(el('p','tiny','Reja haqiqiy xarajat yoki pul o‘tkazmasi emas.'));
 }
 // Local, dependency-free expense donut; financial data never leaves the device.
 function renderExpenseDonut(host,entries){
@@ -469,10 +465,10 @@ function renderExpenseDonut(host,entries){
  const palette=['#2563eb','#0f9d78','#d97706','#9333ea','#db2777','#0891b2','#64748b','#805b43'];
  // Bound the number of slices on small phones; the full category breakdown stays below.
  const groups=entries.length>8?entries.slice(0,7).concat([['Qolgan '+(entries.length-7)+' ta kategoriya',entries.slice(7).reduce((sum,[,value])=>sum+value,0)]]):entries;
- const panel=el('div');panel.style.cssText='margin:12px 0 18px;display:grid;gap:12px;justify-items:center';
+ const panel=el('div');panel.style.cssText='margin:4px 0 0;display:grid;gap:8px;justify-items:center';
  const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
  svg.setAttribute('viewBox','0 0 220 220');svg.setAttribute('role','img');svg.setAttribute('aria-label','Xarajatlar taqsimoti, jami '+money(total));
- svg.style.cssText='width:100%;max-width:218px;height:auto;display:block;overflow:visible';
+ svg.style.cssText='width:100%;max-width:172px;height:auto;display:block;overflow:visible';
  const circle=(color)=>{const c=document.createElementNS(ns,'circle');c.setAttribute('cx','110');c.setAttribute('cy','110');c.setAttribute('r','86');c.setAttribute('fill','none');c.setAttribute('stroke',color);c.setAttribute('stroke-width','30');return c;};
  const circumference=2*Math.PI*86;
  let offset=0;
@@ -495,6 +491,70 @@ function renderExpenseDonut(host,entries){
  });
  panel.append(legend);host.append(panel);
 }
+// Compare only two authenticated ledgers for the same workspace, without changing the active month.
+let compareWorkspace=null,compareTicket=0;
+function previousReportMonth(month){
+ const [y,m]=month.split('-').map(Number);
+ return (m===1?y-1:y)+'-'+String(m===1?12:m-1).padStart(2,'0');
+}
+function initMonthCompare(){
+ const a=$('compare-a'),b=$('compare-b');if(!a||!b)return;
+ const now=F.today().slice(0,7);a.max=now;b.max=now;
+ if(compareWorkspace===state.active&&a.value&&b.value)return;
+ compareWorkspace=state.active;compareTicket++;
+ const second=state.month<=now?state.month:now;
+ a.value=previousReportMonth(second);b.value=second;
+ $('compare-result').replaceChildren();$('compare-run').disabled=false;
+}
+function compareExpenses(a,b){
+ const aggregate=ledger=>{
+  const sums=new Map();
+  for(const t of ledger.transactions||[])if(t.kind==='expense')sums.set(t.category,(sums.get(t.category)||0)+Number(t.amount));
+  return sums;
+ };
+ const x=aggregate(a),y=aggregate(b);
+ const rows=[...new Set([...x.keys(),...y.keys()])].map(category=>{
+  const first=x.get(category)||0,second=y.get(category)||0;
+  return {category,first,second,delta:second-first};
+ }).sort((p,q)=>Math.max(q.first,q.second)-Math.max(p.first,p.second)||p.category.localeCompare(q.category));
+ const first=Number(a.totals.expense),second=Number(b.totals.expense),delta=second-first;
+ if(!Number.isFinite(first)||!Number.isFinite(second))throw Error('Hisobot summasi noto‘g‘ri');
+ return {first,second,delta,percent:first>0?delta/first*100:null,rows};
+}
+function comparisonDelta(value,percent=null){
+ return (value>0?'+':value<0?'−':'')+money(Math.abs(value))+(percent===null?'':' ('+(percent>0?'+':'')+percent.toFixed(1)+'%)');
+}
+async function runMonthCompare(){
+ const host=$('compare-result'),a=$('compare-a').value,b=$('compare-b').value,wid=state.active,now=F.today().slice(0,7);
+ const ticket=++compareTicket;host.replaceChildren();
+ if(!wid||!F.validMonth(a)||!F.validMonth(b)||a===b||a>now||b>now){host.append(el('p','tiny','Ikki xil, kelajakda bo‘lmagan oyni tanlang.'));return;}
+ $('compare-run').disabled=true;host.append(el('p','tiny','Hisobotlar yuklanmoqda…'));
+ try{
+  const get=month=>request('/ledger?workspace='+encodeURIComponent(wid)+'&month='+encodeURIComponent(month));
+  const [x,y]=await Promise.all([get(a),get(b)]);
+  if(ticket!==compareTicket||wid!==state.active)return;
+  if(x.workspace?.id!==wid||y.workspace?.id!==wid||x.month!==a||y.month!==b)throw Error('Boshqa hisob yoki oy qaytdi');
+  const c=compareExpenses(x,y);host.replaceChildren();
+  const totals=el('div','report-compare-grid');
+  for(const [label,value] of [[a,c.first],[b,c.second]]){
+   const block=el('div','metric');block.append(el('span','tiny',label),el('strong','',money(value)));totals.append(block);
+  }
+  host.append(totals);
+  const delta=compactReportRow('Xarajat farqi',comparisonDelta(c.delta,c.percent));delta.lastElementChild.className=c.delta>0?'red':c.delta<0?'green':'';host.append(delta);
+  if(c.first===0&&c.second>0)host.append(el('p','tiny','Birinchi oyda xarajat yo‘q, foiz hisoblanmaydi.'));
+  host.append(el('p','tiny','Ko‘k — '+a+' · binafsha — '+b));
+  if(!c.rows.length)host.append(el('p','tiny','Bu ikki oyda xarajat yozilmagan.'));
+  for(const r of c.rows){
+   const block=el('div','report-compact-row');block.append(el('strong','',r.category));
+   const grid=el('div','report-compare-grid');
+   for(const value of [r.first,r.second]){const n=el('div');n.append(el('strong','',money(value)));grid.append(n);}block.append(grid);
+   const scale=Math.max(r.first,r.second,1);
+   block.append(reportBar(r.first,scale,'#3976dc',a),reportBar(r.second,scale,'#9333ea',b),el('div','tiny '+(r.delta>0?'red':r.delta<0?'green':''),'Farq: '+comparisonDelta(r.delta)));host.append(block);
+  }
+  host.append(el('p','tiny','Yangilangan vaqt: '+new Date().toLocaleTimeString('uz-UZ')+'. Yangi yozuvlardan keyin qayta solishtiring.'));
+ }catch(e){if(ticket===compareTicket&&wid===state.active){host.replaceChildren(el('p','tiny','Hisobot olinmadi: '+e.message));}}
+ finally{if(ticket===compareTicket&&wid===state.active)$('compare-run').disabled=false;}
+}
 function renderReport(data){
  renderComparison(data);
  const opening=cached()?.opening_balance;
@@ -504,9 +564,9 @@ function renderReport(data){
  $('report-closing').textContent=known?money(opening+data.summary.net):'—';
  $('report-balance-note').textContent=(!state.online||pending?'Sinxronlashdan keyin qoldiq aniqlashtiriladi. ':'')+'Faqat yozilgan kirim va chiqimlar bo‘yicha hisobiy qoldiq, bank balansi emas. O‘tgan oy qoldig‘i yangi daromadga qo‘shilmaydi.';
  $('report-period').textContent=state.month+(data.closedAt?' · Yopilgan arxiv':state.month<F.today().slice(0,7)?' · O‘tgan oy arxivi':'');
- $('report-income').textContent=money(data.summary.income);
- $('report-expense').textContent=money(data.summary.expense);
- $('report-net').textContent=money(data.summary.net);
+ $('report-income').textContent=cached()?money(data.summary.income):'—';
+ $('report-expense').textContent=cached()?money(data.summary.expense):'—';
+ $('report-net').textContent=cached()?money(data.summary.net):'—';
  const host=$('report-categories');host.replaceChildren();
  const sums=new Map();
  for(const tx of data.items){
@@ -516,11 +576,12 @@ function renderReport(data){
  if(!cached()){host.append(el('p','tiny','Hisobot ma’lumotlari yuklanmagan.'));}
  else if(!entries.length){host.append(el('p','empty','Bu oyda hali xarajat yo‘q.'));}
  else renderExpenseDonut(host,entries);
- for(const [category,value] of entries){
-  const ratio=data.summary.expense?Math.round(value/data.summary.expense*100):0;
-  const block=el('div','line');block.append(line(category,money(value),ratio+'% · jami chiqimdagi ulushi'));
-  const bar=el('div','bar'),fill=el('div','bar-fill');fill.style.width=ratio+'%';bar.append(fill);block.append(bar);host.append(block);
+ if(cached()&&entries.length>8){
+  const more=el('details','report-more');more.append(el('summary','','Barcha kategoriyalar'));
+  for(const [category,value] of entries)more.append(compactReportRow(category,money(value)+' · '+(value/data.summary.expense*100).toFixed(1)+'%'));
+  host.append(more);
  }
+ initMonthCompare();
  $('report-sync').textContent=state.queue.length?
   state.queue.length+' ta operatsiya hali telefon navbatida. Sinxronlangandan keyin chat hisobotiga ham tushadi.':
   state.online?'Yozuvlar chat bilan bitta Turso bazasida saqlanadi.':'Hozir eski saqlangan natija; internet bilan sinxronlashni tekshiring.';
@@ -910,6 +971,8 @@ function setup(){
  document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('click',()=>chooseView(btn.dataset.view)));
  $('open-settings').onclick=()=>chooseView('settings');
  $('month').onchange=()=>changeMonth($('month').value);
+ $('compare-run').onclick=runMonthCompare;
+ for(const id of ['compare-a','compare-b'])$(id).onchange=()=>{compareTicket++;$('compare-result').replaceChildren();$('compare-run').disabled=false;};
  $('workspace').onchange=async()=>{
   const to=$('workspace').value,old=state.active;
   if(to===old)return;
