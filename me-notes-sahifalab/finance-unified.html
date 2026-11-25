@@ -41,6 +41,11 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inl
 #retry-sync{font-size:12px;min-height:35px;padding:7px 11px;margin-bottom:6px}
 .allocation-control{gap:10px;margin-bottom:8px;align-items:center}.allocation-control .strong{font-size:13px}.allocation-control .btn{min-width:104px;min-height:36px;padding:7px 9px;font-size:13px}
 #allocation-scope{margin:4px 0 8px}
+/* Compact reports: no duplicate category bars, expandable details. */
+.report-card{padding:13px;margin:8px 0}.report-card h2{font-size:15px;margin:0 0 8px}.report-card .headline h2{margin:0}.report-card .headline{margin-bottom:10px}.report-card .metrics{gap:7px}.report-card .metric{padding:9px}.report-card .metric .number{font-size:15px}
+.report-mini-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 0;font-size:13px}.report-mini-row strong{text-align:right;overflow-wrap:anywhere}.report-more{margin-top:3px}.report-more>summary{cursor:pointer;font-size:11px;color:var(--muted)}.report-more p{margin:4px 0}
+.report-card>summary{font-size:14px}.report-card>summary .tiny{display:block;margin-top:3px;font-weight:500}.report-compact-row{border-top:1px solid var(--stroke);padding:8px 0}.report-compact-row .tiny{font-size:11px}.report-compact-row .bar{height:5px;margin-top:4px}
+.report-compare-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7px}.report-compare-grid>div{min-width:0}.report-compare-grid strong{display:block;font-size:12px;overflow-wrap:anywhere}.report-compare-grid .tiny{font-size:11px}
 </style></head><body><main>
 <header class="top"><div class="logo">ME</div><div class="grow"><h1 class="title">ME Notes</h1><div class="sub">Moliya boshqaruvi</div></div><button class="header-action" type="button" id="open-settings" aria-label="Sozlamalar">⚙️</button></header>
 <div id="notices" role="status" aria-live="polite"></div><div id="sync-status" class="status">Ulanish tekshirilmoqda…</div>
@@ -110,13 +115,19 @@ details.card>summary{cursor:pointer;font-weight:750;list-style:revert}.check-inl
 <div class="flex gap-top"><button type="submit" class="btn">O‘zgarishni saqlash</button><button type="button" id="edit-cancel" class="btn alt">Bekor</button></div></form></div>
 <div class="card"><h2>🧾 Yozuvlar</h2><div id="records"></div></div></section>
 <section id="view-report" class="hidden">
-<div class="card"><h2>📊 Oylik hisobot</h2><p id="report-period" class="tiny"></p><div id="report-month-history" class="flex" style="flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+<div class="card report-card"><div class="headline"><h2>📊 Oylik hisobot</h2><span id="report-period" class="tiny"></span></div>
 <div class="metrics"><div class="metric"><div class="tiny">Daromad</div><strong id="report-income" class="number green">—</strong></div><div class="metric"><div class="tiny">Xarajat</div><strong id="report-expense" class="number red">—</strong></div></div>
-<div class="gap-top"><span class="tiny">Hisobiy farq (bank balansi emas)</span><div class="value" id="report-net">—</div></div></div>
-<div class="card"><h2>Hisobiy qoldiq</h2><div class="metrics"><div class="metric"><div class="tiny">Oydan oldingi qoldiq</div><strong id="report-opening" class="number">—</strong></div><div class="metric"><div class="tiny">Oy oxiridagi qoldiq</div><strong id="report-closing" class="number">—</strong></div></div><p id="report-balance-note" class="tiny"></p></div>
-<div class="card"><h2>Kategoriyalar kesimida</h2><div id="report-categories"></div></div>
-<div class="card"><h2>Reja va haqiqiy xarajat</h2><div id="report-comparison"></div></div>
-<div class="card"><h2>Sinxronlash holati</h2><p id="report-sync" class="tiny"></p></div>
+<div class="report-mini-row"><span class="tiny">Oylik hisobiy farq</span><strong id="report-net">—</strong></div>
+<div class="report-mini-row"><span class="tiny">Oy oxiridagi hisobiy qoldiq</span><strong id="report-closing">—</strong></div>
+<details class="report-more"><summary>Qoldiq tafsilotlari</summary><div class="report-mini-row"><span class="tiny">Oydan oldingi qoldiq</span><strong id="report-opening">—</strong></div><p id="report-balance-note" class="tiny"></p></details>
+</div>
+<div class="card report-card"><h2>Xarajatlar taqsimoti</h2><div id="report-categories"></div></div>
+<details class="card report-card" id="report-plan-details"><summary>Reja va haqiqiy xarajat <span id="report-plan-hint" class="tiny"></span></summary><div id="report-comparison" class="gap-top"></div></details>
+<details class="card report-card" id="report-compare-details"><summary>📈 Ikki oyni solishtirish</summary>
+<div class="field-grid"><div><label for="compare-a">Birinchi oy</label><input type="month" id="compare-a"/></div><div><label for="compare-b">Ikkinchi oy</label><input type="month" id="compare-b"/></div></div>
+<button id="compare-run" class="btn gap-top" type="button" style="width:100%">Solishtirish</button>
+<p class="tiny">Faqat tanlangan hisobdagi serverda saqlangan xarajatlar solishtiriladi. Joriy oy hali yakunlanmagan.</p><div id="compare-result" aria-live="polite"></div></details>
+<p id="report-sync" class="tiny" style="padding:0 4px"></p>
 </section><section id="view-budget" class="hidden"><div class="card"><h2>🧮 Oylik taqsimot</h2>
 <div class="headline allocation-control"><span class="strong">Shu hisob uchun taqsimot</span><button id="allocation-toggle" type="button" class="btn alt">Tekshirilmoqda…</button></div>
 <p id="allocation-scope" class="tiny"></p>
