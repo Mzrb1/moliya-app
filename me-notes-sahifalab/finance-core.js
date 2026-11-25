@@ -283,6 +283,23 @@ function setBudget(w,month,category,value){
  w.budgets[month]??={};if(n===0)delete w.budgets[month][category];else w.budgets[month][category]=n;
 }
 function addCategory(w,kind,name){if(!['income','expense'].includes(kind))throw Error('Kategoriya turi noto‘g‘ri');const n=cleanText(name,80);if(n.length<2||w.categories[kind].includes(n)||w.categories[kind].length>=50)throw Error('Kategoriya nomini tekshiring');w.categories[kind].push(n);}
+// Compare category limits against actual expenses, without treating salary allocations as expenses.
+function reportComparison(summary){
+ const rows=(summary.budgets||[]).map(item=>{
+  const spent=Number(item.spent)||0;
+  const limit=item.mode==='fixed'||item.mode==='auto'?Number(item.limit):null;
+  return {category:item.category,spent,limit,mode:item.mode,remaining:limit===null?null:limit-spent,
+   share:summary.expense>0?spent/summary.expense*100:0};
+ }).filter(item=>item.spent>0||item.limit!==null);
+ // Keep unplanned spending separate; do not net overspending against other categories.
+ const planned=rows.filter(r=>r.limit!==null);
+ return {rows:rows.sort((a,b)=>b.spent-a.spent||a.category.localeCompare(b.category)),
+  plannedTotal:planned.reduce((s,r)=>s+r.limit,0),
+  plannedSpent:planned.reduce((s,r)=>s+r.spent,0),
+  over:planned.reduce((s,r)=>s+Math.max(0,-r.remaining),0),
+  unplannedSpent:rows.filter(r=>r.limit===null).reduce((s,r)=>s+r.spent,0),
+  hasPlan:planned.length>0};
+}
 function summary(w,month){
  if(!validMonth(month))throw Error('Oy noto‘g‘ri');
  const items=w.transactions.filter(t=>t.date.startsWith(month));
@@ -340,5 +357,5 @@ function validate(raw){
  return result;
 }
 function csv(w){const quote=v=>{let s=String(v??'');if(/^[\s]*[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};return '\ufeff'+[['Sana','Hisob','Turi','Kategoriya','Summa','Izoh'],...w.transactions.map(t=>[t.date,w.name,t.kind==='income'?'Daromad':'Xarajat',t.category,t.amount,t.note])].map(r=>r.map(quote).join(';')).join('\r\n');}
-return {KINDS,BASE,SALARY_RATES,HOUSEHOLD_WEIGHTS,SALARY_BUCKETS,splitSalary,allocationEnabled,salaryAllocation,effectiveCategoryLimit,KEYWORD_RULES,parseList,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,validate,csv,spent};
+return {KINDS,BASE,SALARY_RATES,HOUSEHOLD_WEIGHTS,SALARY_BUCKETS,splitSalary,allocationEnabled,salaryAllocation,effectiveCategoryLimit,KEYWORD_RULES,parseList,normalizeKeyword,keywordMatches,addKeyword,removeKeyword,today,money,amount,validDay,validMonth,fresh,create,current,setActive,parseFast,categoryFor,addTransaction,editTransaction,removeTransaction,setBudget,addCategory,summary,reportComparison,validate,csv,spent};
 });
