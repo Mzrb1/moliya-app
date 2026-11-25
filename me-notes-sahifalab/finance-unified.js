@@ -343,11 +343,11 @@ function renderPlan(data){
  };
  $('allocation-scope').textContent=data.w.kind==='business'
   ?'Faqat «Maosh» deb belgilangan kirim bo‘linadi. Savdo va xizmat tushumi bo‘linmaydi; bu haqiqiy pul o‘tkazmasi emas.'
-  :'Faqat shu hisobdagi «Maosh» kirimi taqsimlanadi. Boshqa hisoblardagi pullar o‘zgarmaydi.';
+  :'Shu hisobdagi maosh, avans va ish mukofotlari taqsimlanadi. Boshqa hisoblardagi pullar o‘zgarmaydi.';
  const p=data.plan;
  const incomeRows=data.items.filter(x=>x.kind==='income');
- const unmatched=incomeRows.filter(x=>x.category!=='Maosh');
- const maybeSalary=enabled?data.items.filter(x=>isSalaryNote(x.note)&&x.category!=='Maosh'):[];
+ const unmatched=incomeRows.filter(x=>!F.salaryIncome(x));
+ const maybeSalary=enabled?data.items.filter(x=>isSalaryNote(x.note)&&x.kind==='expense'):[];
  const editableSalary=maybeSalary.length===1&&maybeSalary[0].id&&!String(maybeSalary[0].id).startsWith('pending:')&&!data.closedAt?maybeSalary[0]:null;
  $('allocation-intro').textContent=p?'Rejadagi mablag‘lar (xarajat emas).':
   !enabled?'Bu hisobda avtomatik taqsimot o‘chiq. Xohlasangiz «Yoqish» tugmasini bosing.':
@@ -377,7 +377,8 @@ function renderPlan(data){
   return;
  }
  container.append(el('div','value',money(p.salary)));
- for(const [field,label] of F.SALARY_BUCKETS)container.append(line(label,money(p[field])));
+ for(const [field,label] of F.SALARY_BUCKETS){container.append(line(label,money(p[field])));const usage=p.walletUsage?.[field];if(usage)container.append(el('div','tiny','Sarflandi: '+money(usage.spent)+' · Qoldiq: '+money(usage.remaining)));}
+ if(maybeSalary.length){const fix=el('button','btn alt','⚠️ Avans yoki maosh yozuvini tekshirish');fix.type='button';fix.onclick=()=>chooseView('records');container.append(fix);}
  if(p.hardShortfall>0)container.append(el('div','notice','⚠️ Qat’iy Ro‘zg‘or limitlari uchun '+money(p.hardShortfall)+' yetishmaydi. Qat’iy limitlar avtomatik kamaytirilmaydi.'));
  if(p.leisureShortfall>0)container.append(el('div','notice','⚠️ Dam olish limitiga '+money(p.leisureShortfall)+' yetishmaydi.'));
 }
@@ -821,10 +822,10 @@ function render(){
 }
 // Faqat shaxsiy hisobdagi aniq maosh iborasi «+»siz bo‘lsa ham daromad bo‘lsin.
 function isSalaryNote(note){
- return /^(?:oylik|oyligim|maosh|maoshim|ish haqi|ish xaqi|ish haqim|avans|ishdagi oylik)$/.test(F.normalizeKeyword(note));
+ return F.isSalaryNote(note);
 }
 function normaliseQuickKind(parsed,workspaceKind,rawLine){
- if(workspaceKind!=='personal'||parsed.kind!=='expense'||!/^(?:oylik|oyligim|maosh|maoshim)$/.test(F.normalizeKeyword(parsed.note)))return parsed;
+ if(workspaceKind!=='personal'||parsed.kind!=='expense'||!F.isSalaryNote(parsed.note))return parsed;
  if(/[-+]/.test(String(rawLine)))return parsed; // aniq manfiy xarajat o‘zgarib ketmasin
  return {...parsed,kind:'income'};
 }
