@@ -241,7 +241,8 @@ async function handleMessage(update){
   const ledger=await financeApi.ledger(uid,w.id,month);
   const comparison=F.reportComparison({expense:ledger.totals.expense,budgets:ledger.categories});
   const f=F.money;
-  let heading='📊 '+w.name+' — '+month+(ledger.closed_at?' · Arxiv':'')+'\n➕ Daromad: '+f(ledger.totals.income)+'\n➖ Xarajat: '+f(ledger.totals.expense)+'\n📌 Hisobiy farq: '+f(ledger.totals.net)+'\n(Bankdagi haqiqiy qoldiq emas)';
+  let heading='📊 '+w.name+' — '+month+(ledger.closed_at?' · Yopilgan arxiv':month<thisMonth()?' · O‘tgan oy arxivi':'')+'\n➕ Daromad: '+f(ledger.totals.income)+'\n➖ Xarajat: '+f(ledger.totals.expense)+'\n📌 Hisobiy farq: '+f(ledger.totals.net)+'\n(Bankdagi haqiqiy qoldiq emas)';
+  heading+='\nOydan oldingi hisobiy qoldiq: '+f(ledger.totals.opening_balance)+'\nOy oxiridagi hisobiy qoldiq: '+f(ledger.totals.closing_balance)+'\nOldingi qoldiq daromadga qo‘shilmaydi.';
   if(comparison.hasPlan)heading+='\n\nReja: '+f(comparison.plannedTotal)+'\nLimitli xarajat: '+f(comparison.plannedSpent)+'\nLimitdan oshgan: '+f(comparison.over);
   else heading+='\n\nBu oyga limit belgilanmagan.';
   if(comparison.unplannedSpent>0)heading+='\nRejasiz xarajat: '+f(comparison.unplannedSpent);
