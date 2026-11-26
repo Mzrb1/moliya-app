@@ -470,38 +470,50 @@ function renderComparison(data){
  }
  host.append(el('p','tiny','Reja haqiqiy xarajat yoki pul o‘tkazmasi emas.'));
 }
-// Local, dependency-free expense donut; financial data never leaves the device.
-function renderExpenseDonut(host,entries){
- const total=entries.reduce((sum,[,value])=>sum+value,0);
- if(!Number.isFinite(total)||total<=0)return;
- const palette=['#2563eb','#0f9d78','#d97706','#9333ea','#db2777','#0891b2','#64748b','#805b43'];
- // Bound the number of slices on small phones; the full category breakdown stays below.
- const groups=entries.length>8?entries.slice(0,7).concat([['Qolgan '+(entries.length-7)+' ta kategoriya',entries.slice(7).reduce((sum,[,value])=>sum+value,0)]]):entries;
+// Local, dependency-free chart; negative and unknown balances are never plotted as money.
+function balanceChartData(entries,closing){
+ const known=typeof closing==='number'&&Number.isFinite(closing);
+ const palette=['#2563eb','#d97706','#9333ea','#db2777','#0891b2','#64748b','#805b43','#be3455'];
+ const expenses=entries.filter(([,value])=>Number.isFinite(value)&&value>0);
+ const groups=(expenses.length>8?expenses.slice(0,7).concat([['Boshqa '+(expenses.length-7)+' ta kategoriya',expenses.slice(7).reduce((sum,[,value])=>sum+value,0)]]):expenses).map(([name,value],i)=>[name,value,palette[i]]);
+ if(known&&closing>0)groups.push(['Qolgan pul',closing,'#16865c']);
+ return {groups,total:groups.reduce((sum,[,value])=>sum+value,0),known,closing};
+}
+function renderExpenseDonut(host,entries,closing=null){
+ const {groups,total,known}=balanceChartData(entries,closing);
+ if(!Number.isFinite(total)||total<=0){
+  host.append(el('p','empty',known?'Qolgan pul: '+money(closing):'Bu oyda hali xarajat yo‘q. Qoldiq aniqlanmagan.'));
+  return;
+ }
  const panel=el('div');panel.style.cssText='margin:4px 0 0;display:grid;gap:8px;justify-items:center';
  const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
- svg.setAttribute('viewBox','0 0 220 220');svg.setAttribute('role','img');svg.setAttribute('aria-label','Xarajatlar taqsimoti, jami '+money(total));
+ svg.setAttribute('viewBox','0 0 220 220');svg.setAttribute('role','img');svg.setAttribute('aria-label','Xarajatlar va qolgan pul; '+(known?'hisobiy qoldiq '+money(closing):'qoldiq aniqlanmagan'));
  svg.style.cssText='width:100%;max-width:172px;height:auto;display:block;overflow:visible';
  const circle=(color)=>{const c=document.createElementNS(ns,'circle');c.setAttribute('cx','110');c.setAttribute('cy','110');c.setAttribute('r','86');c.setAttribute('fill','none');c.setAttribute('stroke',color);c.setAttribute('stroke-width','30');return c;};
  const circumference=2*Math.PI*86;
  let offset=0;
- groups.forEach(([category,value],index)=>{
-  const length=value/total*circumference,c=circle(palette[index]);
+ groups.forEach(([category,value,color])=>{
+  const length=value/total*circumference,c=circle(color);
   c.setAttribute('stroke-dasharray',length+' '+Math.max(0,circumference-length));
   c.setAttribute('stroke-dashoffset',String(-offset));c.setAttribute('transform','rotate(-90 110 110)');
   const title=document.createElementNS(ns,'title');title.textContent=category+': '+money(value)+' ('+(value/total*100).toFixed(1)+'%)';c.append(title);svg.append(c);offset+=length;
  });
- const center=document.createElementNS(ns,'text');center.setAttribute('x','110');center.setAttribute('y','102');center.setAttribute('text-anchor','middle');center.setAttribute('fill','currentColor');center.setAttribute('font-size','12');center.textContent='Jami xarajat';svg.append(center);
- const amount=document.createElementNS(ns,'text');amount.setAttribute('x','110');amount.setAttribute('y','124');amount.setAttribute('text-anchor','middle');amount.setAttribute('fill','currentColor');amount.setAttribute('font-size','14');amount.setAttribute('font-weight','700');amount.textContent=money(total);if(amount.textContent.length>18){amount.setAttribute('textLength','142');amount.setAttribute('lengthAdjust','spacingAndGlyphs');}svg.append(amount);
+ const center=document.createElementNS(ns,'text');center.setAttribute('x','110');center.setAttribute('y','102');center.setAttribute('text-anchor','middle');center.setAttribute('fill','currentColor');center.setAttribute('font-size','12');center.textContent=known?(closing<0?'Yetishmaydi':'Qolgan pul'):'Jami xarajat';svg.append(center);
+ const amount=document.createElementNS(ns,'text');amount.setAttribute('x','110');amount.setAttribute('y','124');amount.setAttribute('text-anchor','middle');amount.setAttribute('fill','currentColor');amount.setAttribute('font-size','14');amount.setAttribute('font-weight','700');amount.textContent=money(known?Math.abs(closing):total);if(amount.textContent.length>18){amount.setAttribute('textLength','142');amount.setAttribute('lengthAdjust','spacingAndGlyphs');}svg.append(amount);
  panel.append(svg);
  const legend=el('div');legend.style.cssText='width:100%;display:grid;gap:7px';
- groups.forEach(([category,value],index)=>{
+ groups.forEach(([category,value,color])=>{
   const row=el('div');row.style.cssText='display:flex;align-items:center;gap:8px;min-width:0';
-  const dot=el('span');dot.style.cssText='width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:'+palette[index];dot.setAttribute('aria-hidden','true');
+  const dot=el('span');dot.style.cssText='width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:'+color;dot.setAttribute('aria-hidden','true');
   const name=el('span','tiny',category);name.style.cssText='flex:1;min-width:0;overflow-wrap:anywhere';
   const valueLabel=el('span','tiny',money(value)+' · '+(value/total*100).toFixed(1)+'%');valueLabel.style.cssText='text-align:right;flex-shrink:0';
   row.append(dot,name,valueLabel);legend.append(row);
  });
- panel.append(legend);host.append(panel);
+ panel.append(legend);
+ if(known&&closing<0)panel.append(el('p','tiny red','Yetishmaydi: '+money(Math.abs(closing))+'. Diagramma faqat xarajatlarni ko‘rsatadi.'));
+ else if(!known)panel.append(el('p','tiny','Qoldiq serverdan olinmagan; diagramma faqat xarajatlarni ko‘rsatadi.'));
+ else panel.append(el('p','tiny','Qolgan pul = oldingi qoldiq + kirim − chiqim. Foizlar diagrammadagi jami summaga nisbatan.'));
+ host.append(panel);
 }
 // Compare only two authenticated ledgers for the same workspace, without changing the active month.
 let compareWorkspace=null,compareTicket=0;
@@ -586,8 +598,7 @@ function renderReport(data){
  }
  const entries=[...sums].sort((a,b)=>b[1]-a[1]);
  if(!cached()){host.append(el('p','tiny','Hisobot ma’lumotlari yuklanmagan.'));}
- else if(!entries.length){host.append(el('p','empty','Bu oyda hali xarajat yo‘q.'));}
- else renderExpenseDonut(host,entries);
+ else renderExpenseDonut(host,entries,known?opening+data.summary.net:null);
  if(cached()&&entries.length>8){
   const more=el('details','report-more');more.append(el('summary','','Barcha kategoriyalar'));
   for(const [category,value] of entries)more.append(compactReportRow(category,money(value)+' · '+(value/data.summary.expense*100).toFixed(1)+'%'));
