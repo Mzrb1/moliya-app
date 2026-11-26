@@ -3,25 +3,25 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const script=fs.readFileSync('me-notes-sahifalab/finance-unified.js','utf8');
 const html=fs.readFileSync('me-notes-sahifalab/finance-unified.html','utf8');
 const retry=script.slice(script.indexOf('function stopReconnect(){'),script.indexOf('function el(tag'));
-const flush=script.slice(script.indexOf('async function flush(){'),script.indexOf('function chooseView('));
+const flush=script.slice(script.indexOf('async function flush('),script.indexOf('function chooseView('));
 assert.ok(retry.includes('function scheduleReconnect()'));
-assert.ok(flush.includes('async function flush()'));
+assert.ok(flush.includes('async function flush('));
 
 function runner(fail){
  const op={op_id:'web_fixed_retry_uuid',workspace_id:'personal_test',action:'add',
   entry:{kind:'income',category:'Maosh',amount:4000000,note:'oylik',date:'2026-11-17'}};
  const state={deleted:false,busy:false,queue:[op],online:true};
- const submissions=[],messages=[],timers=[];
+ const submissions=[],messages=[],timers=[],refreshes=[];
  const context={
   state,initData:'signed',navigator:{onLine:true},document:{visibilityState:'visible'},
   request:async(path,options)=>{submissions.push(options.body.op_id);if(fail)throw Object.assign(new Error('temporary outage'),{status:503});return {ok:true};},
   alertMessage:msg=>messages.push(msg),noteStatus:()=>{},render:()=>{},save:()=>{},
-  fetchWorkspaces:async()=>{},fetchLedger:async()=>{},fetchMonthHistory:async()=>{},
+  fetchWorkspaces:async()=>refreshes.push('workspaces'),fetchLedger:async()=>refreshes.push('ledger'),fetchMonthHistory:async()=>refreshes.push('months'),
   pull:()=>{},setTimeout:(fn,ms)=>{timers.push({fn,ms});return 1;},clearTimeout:()=>{}
  };
  const scriptlets='let reconnectTimer=null,reconnectDelay=2500;\n'+retry+'\n'+flush+'\n({flush})';
  const api=vm.runInNewContext(scriptlets,context);
- return {api,state,op,submissions,messages,timers};
+ return {api,state,op,submissions,messages,timers,refreshes};
 }
 test('Transient POST failure retains the same queued operation and schedules an automatic retry',async()=>{
  const x=runner(true);
@@ -54,3 +54,5 @@ test('Manual retry button only appears for pending writes and has a real handler
  assert.match(script,/\$\('retry-sync'\)\.onclick=/);
  assert.match(script,/localStorage\.setItem\(QUEUE_KEY,JSON\.stringify\(state\.queue\)\)/);
 });
+
+test('Initial pull flushes queued writes without duplicate refresh',async()=>{const x=runner(false);await x.api.flush({refresh:false});assert.equal(x.state.queue.length,0);assert.deepEqual(x.refreshes,[]);});

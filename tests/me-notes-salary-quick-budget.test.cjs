@@ -51,9 +51,11 @@ test('Missing Maosh offers edit-in-place and does not add another income',()=>{
  assert.match(js,/enqueue\(\{action:'edit',transaction_id:editableSalary\.id/);
  assert.doesNotMatch(js,/action:'add',entry:\{kind:'income',category:'Maosh',amount:editableSalary\.amount/);
 });
-test('Unsigned ambiguous advance is not silently counted as salary',()=>{
+test('Advance income counts as salary; explicit minus remains expense',()=>{
  const parse=parser();
- assert.equal(parse('2 mln avans')[0].kind,'expense');
+ assert.equal(parse('2 mln avans')[0].kind,'income');
+ assert.equal(parse('2 mln avans oldim')[0].category,'Maosh');
+ assert.equal(parse('-2 mln avans')[0].kind,'expense');
  assert.equal(parse('+2 mln avans')[0].category,'Maosh');
 });
 test('Family/business income does not trigger a personal allocation',()=>{

@@ -225,8 +225,7 @@ async function pull(){
  noteStatus();
  $('connection-help').classList.add('hidden');
  try{
-  await fetchWorkspaces();state.online=true;await flush();await fetchLedger();await fetchMonthHistory();
-  try{await fetchAccountStatus();}catch(e){$('daily-backup-status').textContent='Zaxira holati vaqtincha olinmadi.';}
+  await fetchWorkspaces();state.online=true;await flush({refresh:false});await fetchLedger();
   // A successful read does not mean a pending write reached Turso.
   // Preserve its op_id and keep retrying after a temporary POST failure.
   if(state.queue.length&&!state.online){
@@ -234,6 +233,11 @@ async function pull(){
   }
   state.online=true;stopReconnect();render();alertMessage('');
   $('connection-help').classList.add('hidden');
+  // The main ledger is already visible. Optional panels must not block it or mark it offline.
+  await Promise.allSettled([
+   fetchMonthHistory(),
+   fetchAccountStatus().catch(()=>{$('daily-backup-status').textContent='Zaxira holati vaqtincha olinmadi.';})
+  ]);
  }catch(e){
   state.online=false;
   const recoverable=!e.status||e.status>=500;
@@ -264,7 +268,7 @@ function enqueue(data){
  try{save();}catch(e){state.queue.pop();throw e;}
  render();noteStatus();flush();
 }
-async function flush(){
+async function flush({refresh=true}={}){
  if(state.deleted||state.busy||!initData||!navigator.onLine||!state.queue.length)return;
  state.busy=true;
  try{
@@ -289,7 +293,7 @@ async function flush(){
    }
   }
  }finally{state.busy=false;noteStatus();render();}
- if(!state.queue.length&&state.online){
+ if(refresh&&!state.queue.length&&state.online){
   try{await fetchWorkspaces();await fetchLedger();await fetchMonthHistory();render();noteStatus();}catch(e){state.online=false;noteStatus();}
  }
 }
@@ -624,8 +628,8 @@ function renderSettings(data){
 }
 
 function renderMonthHistory(){
- const host=$('month-history'),reportHost=$('report-month-history');if(!host)return;
- host.replaceChildren();reportHost?.replaceChildren();
+ const host=$('month-history');if(!host)return;
+ host.replaceChildren();
  const data=compute();
  const known=state.months||[];
  if(!known.length)host.append(el('p','tiny','Oldingi oylar ro‘yxati serverga ulanganda ko‘rinadi.'));
@@ -638,7 +642,6 @@ function renderMonthHistory(){
   show.disabled=state.month===item.month;
   show.onclick=()=>changeMonth(item.month);
   block.append(details,show);host.append(block);
-  if(reportHost){const button=el('button','btn alt',item.month+(item.closed_at?' · Yopilgan':item.month<F.today().slice(0,7)?' · Arxiv':''));button.type='button';button.disabled=state.month===item.month;button.onclick=()=>changeMonth(item.month);reportHost.append(button);}
  }
  const closed=!!data?.closedAt,current=F.today().slice(0,7);
  $('month-archive-status').textContent=state.month+' — '+(closed?'arxivlangan (faqat o‘qish)':
