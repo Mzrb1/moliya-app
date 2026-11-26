@@ -301,6 +301,10 @@ function chooseView(name){
  state.views=name;
  for(const view of ['home','records','budget','report','settings'])$('view-'+view).classList.toggle('hidden',view!==name);
  document.querySelectorAll('.bottom [data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===name));
+ if(name==='records'){
+  const data=compute();
+  if(data)displayRows('records',data.items,150,data.closedAt);
+ }
  window.scrollTo?.({top:0,behavior:'smooth'});
 }
 function line(name,value,detail){
@@ -309,7 +313,7 @@ function line(name,value,detail){
  if(detail)left.append(el('div','tiny',detail));
  row.append(left,el('span','strong',value));return row;
 }
-function displayRows(target,items,limit=100){
+function displayRows(target,items,limit=100,closedAt=false){
  const dest=$(target);dest.replaceChildren();
  if(!items.length){dest.append(el('div','empty','Hozircha yozuvlar yo‘q.'));return;}
  for(const t of items.slice(0,limit)){
@@ -320,7 +324,7 @@ function displayRows(target,items,limit=100){
   info.append(el('div','tiny',t.date+' · '+(t.note||'')+(t.id.startsWith('pending:')?' · Yuborilmoqda':'')));
   const end=el('div');end.style.textAlign='right';
   end.append(el('div','strong '+(t.kind==='income'?'green':'red'),sign+money(t.amount)));
-  if(target==='records'&&!t.id.startsWith('pending:')&&!compute()?.closedAt){
+  if(target==='records'&&!t.id.startsWith('pending:')&&!closedAt){
    const edit=el('button','btn alt','Tahrirlash');
    edit.type='button';edit.style.cssText='font-size:11px;padding:5px 8px;min-height:30px;margin-top:5px';
    edit.onclick=()=>openEdit(t);
@@ -412,8 +416,7 @@ function renderBudgets(data){
   block.append(actions);dest.append(block);
  }
 }
-function fillCategory(id,kind,selected){
- const d=compute();
+function fillCategory(id,kind,selected,d=compute()){ 
  const list=d?.prefs?.categories?.[kind]||F.BASE[current()?.kind||'personal'][kind]||[];
  const select=$(id),value=selected??select.value;
  select.replaceChildren(...list.map(cat=>{const opt=el('option');opt.value=cat;opt.textContent=cat;return opt;}));
@@ -627,10 +630,9 @@ function renderSettings(data){
  }
 }
 
-function renderMonthHistory(){
+function renderMonthHistory(data=compute()){
  const host=$('month-history');if(!host)return;
  host.replaceChildren();
- const data=compute();
  const known=state.months||[];
  if(!known.length)host.append(el('p','tiny','Oldingi oylar ro‘yxati serverga ulanganda ko‘rinadi.'));
  for(const item of known){
@@ -820,11 +822,11 @@ function render(){
  $('manual-form').querySelector('button[type=submit]').disabled=!!data.closedAt;
  if(data.closedAt){$('quick-month-hint').textContent='🗃 Bu oy arxivlangan. Qayta ochish uchun ⚙️ → Oylik arxiv.';$('quick-month-hint').classList.remove('hidden');}
  displayRows('recent',data.items,3);
- displayRows('records',data.items,150);
+ if(state.views==='records')displayRows('records',data.items,150,data.closedAt);
  renderPlan(data);renderBudgets(data);
- renderReport(data);renderSettings(data);renderMonthHistory();renderMonthReset(data);
- fillCategory('manual-category',$('manual-kind').value);
- if(editingId)fillCategory('edit-category',$('edit-kind').value);
+ renderReport(data);renderSettings(data);renderMonthHistory(data);renderMonthReset(data);
+ fillCategory('manual-category',$('manual-kind').value,undefined,data);
+ if(editingId)fillCategory('edit-category',$('edit-kind').value,undefined,data);
  noteStatus();
 }
 // Faqat shaxsiy hisobdagi aniq maosh iborasi «+»siz bo‘lsa ham daromad bo‘lsin.
