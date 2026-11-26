@@ -56,3 +56,32 @@ test('Offline JS shell cache version advanced; API never cached',()=>{
  assert.match(sw,/req.method!=='GET'/);
  assert.match(sw,/url.origin!==self.location.origin/);
 });
+
+test('Record rendering reuses the ledger snapshot and does not compute for every row',()=>{
+ const vm=require('node:vm');
+ const src=controller.slice(controller.indexOf('function displayRows('),controller.indexOf('function renderPlan('));
+ const node=()=>({style:{},children:[],append(...items){this.children.push(...items);},replaceChildren(){this.children=[];}});
+ const dest=node(),rows=Array.from({length:150},(_,i)=>({id:'row'+i,kind:'expense',category:'Test',note:'Test',date:'2026-11-27',amount:1000}));
+ const draw=vm.runInNewContext(src+'\n displayRows',{el:node,$:()=>dest,money:String,compute:()=>{throw Error('Unexpected per-row ledger calculation');}});
+ draw('records',rows,150,false);
+ assert.equal(dest.children.length,150);
+ assert.equal(dest.children[0].children[1].children.length,3);
+ draw('records',rows,150,true);
+ assert.equal(dest.children.length,150);
+ assert.equal(dest.children[0].children[1].children.length,1);
+});
+test('Hidden records list is rendered only when the records view is active',()=>{
+ const vm=require('node:vm');
+ const src=controller.slice(controller.indexOf('function chooseView('),controller.indexOf('function line('));
+ const state={views:'home'},calls=[];
+ const element={classList:{toggle(){}}};
+ const data={items:[{id:'a'}],closedAt:null};
+ const choose=vm.runInNewContext(src+'\n chooseView',{state,$:()=>element,document:{querySelectorAll:()=>[]},window:{scrollTo(){}},compute:()=>data,displayRows:(...args)=>calls.push(args)});
+ choose('home');
+ assert.equal(calls.length,0);
+ choose('records');
+ assert.equal(calls.length,1);
+ assert.equal(calls[0][0],'records');
+ assert.equal(calls[0][1],data.items);
+ assert.match(controller,/if\(state\.views==='records'\)displayRows\('records',data\.items,150,data\.closedAt\)/);
+});
