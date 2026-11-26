@@ -56,3 +56,57 @@ test('Offline JS shell cache version advanced; API never cached',()=>{
  assert.match(sw,/req.method!=='GET'/);
  assert.match(sw,/url.origin!==self.location.origin/);
 });
+
+test('Record rendering reuses the ledger snapshot and does not compute for every row',()=>{
+ const vm=require('node:vm');
+ const src=controller.slice(controller.indexOf('function displayRows('),controller.indexOf('function renderPlan('));
+ const node=()=>({style:{},children:[],append(...items){this.children.push(...items);},replaceChildren(){this.children=[];}});
+ const dest=node(),rows=Array.from({length:150},(_,i)=>({id:'row'+i,kind:'expense',category:'Test',note:'Test',date:'2026-11-27',amount:1000}));
+ const draw=vm.runInNewContext(src+'\n displayRows',{el:node,$:()=>dest,money:String,compute:()=>{throw Error('Unexpected per-row ledger calculation');}});
+ draw('records',rows,150,false);
+ assert.equal(dest.children.length,150);
+ assert.equal(dest.children[0].children[1].children.length,3);
+ draw('records',rows,150,true);
+ assert.equal(dest.children.length,150);
+ assert.equal(dest.children[0].children[1].children.length,1);
+});
+test('Hidden records list is rendered only when the records view is active',()=>{
+ const vm=require('node:vm');
+ const src=controller.slice(controller.indexOf('function chooseView('),controller.indexOf('function line('));
+ const state={views:'home'},calls=[];
+ const element={classList:{toggle(){}}};
+ const data={items:[{id:'a'}],closedAt:null};
+ const choose=vm.runInNewContext(src+'\n chooseView',{state,$:()=>element,document:{querySelectorAll:()=>[]},window:{scrollTo(){}},compute:()=>data,displayRows:(...args)=>calls.push(args)});
+ choose('home');
+ assert.equal(calls.length,0);
+ choose('records');
+ assert.equal(calls.length,1);
+ assert.equal(calls[0][0],'records');
+ assert.equal(calls[0][1],data.items);
+ assert.match(controller,/if\(state\.views==='records'\)displayRows\('records',data\.items,150,data\.closedAt\)/);
+});
+
+test('Balance chart includes positive closing balance and never fabricates negative or missing slices',()=>{
+ const vm=require('node:vm');
+ const src=controller.slice(controller.indexOf('function balanceChartData('),controller.indexOf('function renderExpenseDonut('));
+ const chart=vm.runInNewContext(src+'\n balanceChartData',{});
+ const cases=[
+  [[['Bozor',200000]],800000,1000000,true],
+  [[['Bozor',200000]],-50000,200000,false],
+  [[],100000,100000,true],
+  [[],0,0,false],
+  [[['Bozor',200000]],null,200000,false]
+ ];
+ for(const [entries,balance,total,hasRemaining] of cases){
+  const result=chart(entries,balance);
+  assert.equal(result.total,total);
+  assert.equal(result.known,balance!==null);
+  assert.equal(result.groups.some(x=>x[0]==='Qolgan pul'),hasRemaining);
+  assert.ok(result.groups.every(x=>x[1]>0));
+ }
+ const many=chart(Array.from({length:12},(_,i)=>['Category '+i,100]),300);
+ assert.equal(many.total,1500);
+ assert.equal(many.groups.length,9);
+ assert.equal(many.groups.at(-1)[1],300);
+ assert.match(controller,/renderExpenseDonut\(host,entries,known\?opening\+data\.summary\.net:null\)/);
+});
