@@ -628,8 +628,8 @@ function renderSettings(data){
 }
 
 function renderMonthHistory(){
- const host=$('month-history'),reportHost=$('report-month-history');if(!host)return;
- host.replaceChildren();reportHost?.replaceChildren();
+ const host=$('month-history');if(!host)return;
+ host.replaceChildren();
  const data=compute();
  const known=state.months||[];
  if(!known.length)host.append(el('p','tiny','Oldingi oylar ro‘yxati serverga ulanganda ko‘rinadi.'));
@@ -642,7 +642,6 @@ function renderMonthHistory(){
   show.disabled=state.month===item.month;
   show.onclick=()=>changeMonth(item.month);
   block.append(details,show);host.append(block);
-  if(reportHost){const button=el('button','btn alt',item.month+(item.closed_at?' · Yopilgan':item.month<F.today().slice(0,7)?' · Arxiv':''));button.type='button';button.disabled=state.month===item.month;button.onclick=()=>changeMonth(item.month);reportHost.append(button);}
  }
  const closed=!!data?.closedAt,current=F.today().slice(0,7);
  $('month-archive-status').textContent=state.month+' — '+(closed?'arxivlangan (faqat o‘qish)':
