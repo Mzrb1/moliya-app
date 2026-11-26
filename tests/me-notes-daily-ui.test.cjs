@@ -52,7 +52,7 @@ test('Telegram /start is concise while detailed reference stays in /yordam',()=>
 });
 test('Offline JS shell cache version advanced; API never cached',()=>{
  const sw=read('me-notes-sahifalab/finance-sw.js');
- assert.match(sw,/finance-shell-v4/);
+ assert.ok(Number(sw.match(/finance-shell-v(\d+)/)?.[1])>=4,'shell cache version must not regress');
  assert.match(sw,/req.method!=='GET'/);
  assert.match(sw,/url.origin!==self.location.origin/);
 });
